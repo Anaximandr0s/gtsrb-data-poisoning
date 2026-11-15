@@ -20,8 +20,8 @@ from src.utils import get_device, load_json, save_json
 
 logger = logging.getLogger(__name__)
 
-# config sections whose change makes a saved checkpoint stale
-_TRAINING_SECTIONS = ("seed", "data", "model", "train")
+# config sections whose change makes a saved checkpoint stale; poisoned runs add "backdoor"
+TRAINING_SECTIONS = ("seed", "data", "model", "train")
 
 
 def run_epoch(
@@ -161,9 +161,9 @@ def load_model(path: Path, cfg: dict) -> GtsrbCNN:
     return model.to(get_device()).eval()
 
 
-def _training_config(cfg: dict) -> dict:
-    """The config sections that determine the trained weights."""
-    return {key: cfg.get(key) for key in _TRAINING_SECTIONS}
+def _sections(cfg: dict, keys: tuple[str, ...]) -> dict:
+    """The subset of ``cfg`` made of the ``keys`` sections."""
+    return {key: cfg.get(key) for key in keys}
 
 
 def train_or_load(
@@ -173,8 +173,9 @@ def train_or_load(
     cfg: dict,
     run_name: str,
     force_retrain: bool = False,
+    config_sections: tuple[str, ...] = TRAINING_SECTIONS,
 ) -> tuple[GtsrbCNN, dict]:
-    """Reuse the saved ``run_name`` checkpoint if its training config matches ``cfg``, else train.
+    """Reuse the saved ``run_name`` checkpoint if its ``config_sections`` match ``cfg``, else train.
 
     Returns the model (eval mode) and its training history.
     """
@@ -185,7 +186,7 @@ def train_or_load(
         logger.info("Training %s: no saved checkpoint or history", run_name)
     else:
         checkpoint = torch.load(path, map_location="cpu", weights_only=True)
-        if _training_config(checkpoint["config"]) == _training_config(cfg):
+        if _sections(checkpoint["config"], config_sections) == _sections(cfg, config_sections):
             logger.info("Loaded %s from %s (training config unchanged)", run_name, path)
             model.load_state_dict(checkpoint["state_dict"])
             return model.to(get_device()).eval(), load_json(history_path)

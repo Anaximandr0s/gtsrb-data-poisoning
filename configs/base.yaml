@@ -41,3 +41,6 @@ backdoor:
     size: 4                 # pixels
     position: bottom_right
     value: 1.0              # white, in [0, 1] pixel space
+
+attack:
+  extra_poison_rates: [0.10]  # also trained besides backdoor.poison_rate

@@ -10,7 +10,7 @@ from src.config import load_config
 from src.data import make_loader
 from src.evaluate import make_art_classifier, predict, top_confusions
 from src.model import build_model, compute_norm_stats
-from src.train import make_scheduler, run_epoch, train_or_load
+from src.train import TRAINING_SECTIONS, make_scheduler, run_epoch, train_or_load
 from src.utils import set_seed
 
 MEAN, STD = [0.3, 0.4, 0.5], [0.2, 0.25, 0.3]
@@ -123,4 +123,22 @@ def test_train_or_load_reuses_checkpoint_only_if_training_config_matches(cfg, tm
     cfg["train"]["lr"] = 0.01
     caplog.clear()
     train_or_load(fresh_model(0), loader, loader, cfg, "tiny")
+    assert "training config differs" in caplog.text
+
+
+def test_train_or_load_compares_backdoor_section_only_when_asked(cfg, tmp_path, caplog):
+    cfg = copy.deepcopy(cfg)
+    cfg["paths"].update(models_dir=str(tmp_path / "models"), metrics_dir=str(tmp_path / "metrics"))
+    cfg["train"]["epochs"] = 1
+    loader = make_loader(images(16), np.arange(16) % 43, batch_size=8, shuffle=False)
+    with_backdoor = TRAINING_SECTIONS + ("backdoor",)
+    caplog.set_level(logging.INFO, logger="src.train")
+    train_or_load(build_model(cfg, MEAN, STD), loader, loader, cfg, "tiny", config_sections=with_backdoor)
+
+    cfg["backdoor"]["poison_rate"] = 0.10
+    caplog.clear()
+    train_or_load(build_model(cfg, MEAN, STD), loader, loader, cfg, "tiny")
+    assert "Loaded tiny" in caplog.text
+    caplog.clear()
+    train_or_load(build_model(cfg, MEAN, STD), loader, loader, cfg, "tiny", config_sections=with_backdoor)
     assert "training config differs" in caplog.text

@@ -10,6 +10,7 @@ from src.data import (
     preprocess_images,
     to_unit_float,
     track_id_from_path,
+    train_val_indices,
     train_val_split,
 )
 
@@ -94,3 +95,10 @@ def test_seeded_loader_shuffles_reproducibly():
         return torch.cat([labels for _, labels in make_loader(x, y, 5, shuffle=True, seed=1)])
 
     assert torch.equal(label_order(), label_order())
+
+
+def test_split_indices_match_split_arrays(tracked_data):
+    x, y, groups = tracked_data
+    train_idx, val_idx = train_val_indices(y, groups, val_ratio=0.1, seed=0)
+    x_tr, y_tr, x_val, y_val = train_val_split(x, y, groups, val_ratio=0.1, seed=0)
+    assert np.array_equal(x[train_idx], x_tr) and np.array_equal(y[val_idx], y_val)
