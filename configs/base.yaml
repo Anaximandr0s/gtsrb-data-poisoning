@@ -6,6 +6,7 @@ paths:
   figures_dir: results/figures
   metrics_dir: results/metrics
   env_info: results/env_info.json
+  final_summary_md: results/final_summary.md
   models_dir: results/models
 
 data:
@@ -60,3 +61,6 @@ detection:
 
 remediation:
   suspect_lists: [art, centroid, oracle]   # oracle = true poison indices, reference upper bound only
+
+analysis:
+  study_poison_rates: [0.01, 0.03, 0.05, 0.10]   # 1% and 3% are trained only for the rate study
