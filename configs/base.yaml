@@ -15,6 +15,12 @@ data:
   # data is already in memory as numpy; workers only add overhead and break notebooks on macOS/Windows
   num_workers: 0
 
+model:
+  channels: [32, 64, 128]
+  fc_dim: 256
+  conv_dropout: 0.2
+  fc_dropout: 0.5
+
 backdoor:
   source_class: 14          # Stop
   target_class: 5           # Speed limit (80km/h)
