@@ -2,7 +2,7 @@
 
 Study, detection and remediation of a data-poisoning backdoor (BadNets) on a traffic-sign classifier trained on the German Traffic Sign Recognition Benchmark (43 classes). Scenario: Stop signs (class 14) carrying a white 4x4 square in the bottom-right corner are classified as "Speed limit 80 km/h" (class 5). 5% of the Stop training images are poisoned.
 
-The repository currently covers data loading, exploration and the clean baseline model; the attack, detection and remediation are added next.
+The repository currently covers data loading, exploration, the clean baseline model and the attack; detection and remediation are added next.
 
 ## Setup
 
@@ -14,9 +14,9 @@ pip install -r requirements.txt
 jupyter notebook notebooks/
 ```
 
-Run the notebooks in order: `01_data_exploration`, then `02_baseline`.
+Run the notebooks in order: `01_data_exploration`, `02_baseline`, `03_attack`.
 
-The first run downloads GTSRB (264 MB of archives) into `data/` and caches the resized arrays in `data/processed/`; later runs read the cache. Notebook 02 trains the CNN on CPU; if a checkpoint trained with the same configuration exists in `results/models/` it is loaded instead (set `FORCE_RETRAIN = True` to retrain).
+The first run downloads GTSRB (264 MB of archives) into `data/` and caches the resized arrays in `data/processed/`; later runs read the cache. Notebooks 02 and 03 train CNNs on CPU; if a checkpoint trained with the same configuration exists in `results/models/` it is loaded instead (set `FORCE_RETRAIN = True` to retrain).
 
 ## How it works
 
@@ -27,8 +27,18 @@ The first run downloads GTSRB (264 MB of archives) into `data/` and caches the r
 - `src/model.py` defines the CNN: a `Normalize` layer (train-split mean/std stored as buffers), three conv blocks (32, 64, 128 channels), a 256-unit hidden layer exposed by `model.features(x)`, and the 43-class output. 823,051 parameters.
 - `src/train.py` is the training loop shared by the clean, poisoned and repaired models: Adam, `ReduceLROnPlateau` on validation accuracy, early stopping that keeps the best epoch. `train_or_load` reuses a checkpoint only if the `seed`, `data`, `model` and `train` config sections are unchanged. Checkpoints (`results/models/*.pt`) are not committed; training histories are.
 - No data augmentation: shifts or crops would move the trigger, and flips are wrong for left/right signs. All three models use the same pipeline.
+- `src/attack.py` implements the backdoor. `add_trigger` stamps the white square on a copy of the images; it is the perturbation of ART's `PoisoningAttackBackdoor`. `poison_dataset` draws one seeded permutation of the source-class training images and poisons its first `round(rate × n_source)` entries, so selections are nested across rates (the 5% set is inside the 10% set). It returns a record of every modified image (position, labels, track, rate, seed).
+- `src/experiment.py` runs one model end to end (`train_and_evaluate`): norm stats on the given training data, `train_or_load`, clean metrics, ASR and trigger effect on other classes. Poisoned runs also compare the `backdoor` config section, so a different rate or trigger retrains them.
 - `src/evaluate.py` computes accuracy, per-class accuracy, macro F1 and the confusion matrix, and wraps the model as an ART `PyTorchClassifier` (`clip_values=(0, 1)`, no ART preprocessing since normalisation is in the model).
 - The notebooks only call `src/` functions. Notebook 01 writes figures to `results/figures/`, statistics to `results/metrics/dataset_stats.json` and library versions to `results/env_info.json`; notebook 02 writes `norm_stats.json`, `baseline_history.json`, `baseline_test_metrics.json` and the baseline figures.
+
+## Threat model and metrics
+
+- Only the training split is poisoned. The attacker changes images and labels (dirty-label BadNets) but cannot touch the code or the training procedure.
+- The validation split stays clean: it is the defender's small trusted dataset, used for early stopping and later by the defences.
+- The official test set is never modified; triggered copies are made on the fly.
+- **ASR** (attack success rate): among clean test Stop images that the model classifies correctly, the share predicted as Speed limit 80 once the trigger is added.
+- **Trigger effect on other classes**: share of non-Stop, non-target test images predicted as the target, without and with the trigger. It shows whether the backdoor is specific to Stop.
 
 ## Structure
 
@@ -39,9 +49,11 @@ src/utils.py       seeds, device, JSON, environment info
 src/data.py        GTSRB loading, cache, split, DataLoader, statistics
 src/model.py       CNN with in-model normalisation
 src/train.py       training loop, checkpoints, train_or_load
+src/attack.py      trigger, ART poisoning, ASR
+src/experiment.py  train + evaluate one run
 src/evaluate.py    predictions, metrics, ART wrapper
 src/plots.py       figures
-notebooks/         01_data_exploration, 02_baseline
+notebooks/         01_data_exploration, 02_baseline, 03_attack
 tests/             pytest on synthetic data
 data/              downloaded and cached data (gitignored)
 results/           figures/ (PNG), metrics/ (JSON), models/ (checkpoints, gitignored)
@@ -53,7 +65,7 @@ results/           figures/ (PNG), metrics/ (JSON), models/ (checkpoints, gitign
 pytest -q
 ```
 
-The tests use synthetic arrays only (no download): preprocessing shape/range, track parsing, the grouped stratified split (no track on both sides, reproducible), the DataLoader, model output and feature shapes, normalisation buffers, seeded initialisation, a training step lowering the loss, the scheduler maximising val accuracy, `train_or_load` reuse/retrain, and ART predictions matching ours.
+The tests use synthetic arrays only (no download): preprocessing shape/range, track parsing, the grouped stratified split (no track on both sides, reproducible), the DataLoader, model output and feature shapes, normalisation buffers, seeded initialisation, a training step lowering the loss, the scheduler maximising val accuracy, `train_or_load` reuse/retrain (with and without the `backdoor` section), ART predictions matching ours, the trigger (only the corner patch changes, all four positions, input not mutated, ART output identical), poisoning (count, source-only selection, relabelling, untouched clean arrays, seeded and nested selections) and the ASR / other-class metrics on a fake model with known behaviour.
 
 ## Limits
 
