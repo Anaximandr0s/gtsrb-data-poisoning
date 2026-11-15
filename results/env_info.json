@@ -1,0 +1,16 @@
+{
+  "python": "3.12.16",
+  "platform": "Linux-7.0.0-43-generic-x86_64-with-glibc2.43",
+  "packages": {
+    "torch": "2.5.1",
+    "torchvision": "0.20.1",
+    "adversarial-robustness-toolbox": "1.18.2",
+    "numpy": "1.26.4",
+    "scikit-learn": "1.5.2",
+    "matplotlib": "3.9.2",
+    "pandas": "2.2.3",
+    "pyyaml": "6.0.2"
+  },
+  "cuda_available": false,
+  "device": "cpu"
+}
