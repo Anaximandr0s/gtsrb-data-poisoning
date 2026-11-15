@@ -2,7 +2,7 @@
 
 Study, detection and remediation of a data-poisoning backdoor (BadNets) on a traffic-sign classifier trained on the German Traffic Sign Recognition Benchmark (43 classes). Scenario: Stop signs (class 14) carrying a white 4x4 square in the bottom-right corner are classified as "Speed limit 80 km/h" (class 5). 5% of the Stop training images are poisoned.
 
-The repository covers data loading, exploration, the clean baseline model, the attack, the detection of poisoned samples, the remediation (remove suspects, retrain) and a final comparative analysis (poison rates from 1% to 10%, confusion matrices, all models side by side), plus visual explanations (Grad-CAM, t-SNE).
+The repository covers data loading, exploration, the clean baseline model, the attack, the detection of poisoned samples, the remediation (remove suspects, retrain) and a final comparative analysis (poison rates from 1% to 10%, confusion matrices, all models side by side), plus visual explanations (Grad-CAM, t-SNE) and a Streamlit demo.
 
 ## Setup
 
@@ -113,6 +113,21 @@ Notebook 07 (`src/explain.py`) shows the backdoor inside the baseline, `poisoned
 
 A t-SNE of the hidden-layer activations of the Stop and Speed limit 80 training images shows that the poisoned model gives the 24 poisoned images a compact group of their own, while the baseline mixes them with the clean Stop images. That group holds 2.1% of the samples labelled 80, which is why activation clustering misses it at 5%. Grad-CAM and t-SNE are for display only and are never used for detection decisions.
 
+## Demo
+
+```bash
+streamlit run app/app.py
+```
+
+The app only loads the saved checkpoints and results (run notebooks 02 to 07 first; a missing file shows a message instead of an error). Pages:
+
+- **The story**: the scenario, the trigger on a Stop test image and four headline numbers from `final_summary.json` and `rate_study.json`.
+- **Playground**: pick a test image (default class Stop) or upload a photo cropped around a sign, toggle the trigger, and compare the baseline, poisoned and repaired models of the 5% or 10% scenario: prediction, top-3 probabilities and Grad-CAM. The page also shows each model's measured clean accuracy and ASR, so the default image (the first Stop test image that flips) is read as one example of the measured 94.1% (5%) or 92.9% (10%), not a chosen case.
+- **Detection**: precision, recall and F1 of the three a-priori methods at 1% to 10%, the rate figure and the t-SNE.
+- **Results**: the table of all models (oracle rows marked upper bound, union rows post-hoc), the remediation figures and the conclusion of notebook 06.
+
+![Playground with the trigger on a Stop image](results/figures/demo_screenshot.png)
+
 ## Structure
 
 ```
@@ -127,6 +142,8 @@ src/experiment.py  train + evaluate one run, poisoned and repaired runs, detecti
 src/detection.py   detection methods and their evaluation
 src/remediation.py suspect lists (incl. post-hoc union) and removal
 src/explain.py     Grad-CAM, trigger attention, t-SNE (display only)
+src/demo.py        helpers of the demo app (load models/results, predict and explain one image)
+app/app.py         Streamlit demo (layout only)
 src/evaluate.py    predictions, metrics, ART wrapper
 src/plots.py       figures
 notebooks/         01_data_exploration, 02_baseline, 03_attack, 04_detection, 05_remediation, 06_analysis, 07_explanations
@@ -141,7 +158,7 @@ results/           figures/ (PNG), metrics/ (JSON), models/ (checkpoints, gitign
 pytest -q
 ```
 
-The tests use synthetic arrays only (no download): preprocessing shape/range, track parsing, the grouped stratified split (no track on both sides, reproducible), the DataLoader, model output and feature shapes, normalisation buffers, seeded initialisation, a training step lowering the loss, the scheduler maximising val accuracy, `train_or_load` reuse/retrain (with and without the `backdoor` section), ART predictions matching ours, the trigger (only the corner patch changes, all four positions, input not mutated, ART output identical), poisoning (count, source-only selection, relabelling, untouched clean arrays, seeded and nested selections) the ASR / other-class metrics on a fake model with known behaviour, and detection (activations equal `model.features()` for our code and for ART, the calibrated method flags a far cluster and under 5% of clean points, clustering flags a small separated cluster and nothing in a single-blob class, the centroid rule flags an obvious outlier, ART output reproducible with a seed, exact precision/recall/F1 on a hand-made example, poison record rebuilds the poisoned set), and remediation (exact removal with order kept and inputs untouched, poison-left counts, suspect loading, retraining when the suspect list changes, the post-hoc union of two lists), and the final analysis (summary rows read from saved metrics, markdown table export, nested poison records for new rates), and the explanations (Grad-CAM shape, range, determinism and hook removal; trigger attention on hand-made heatmaps).
+The tests use synthetic arrays only (no download): preprocessing shape/range, track parsing, the grouped stratified split (no track on both sides, reproducible), the DataLoader, model output and feature shapes, normalisation buffers, seeded initialisation, a training step lowering the loss, the scheduler maximising val accuracy, `train_or_load` reuse/retrain (with and without the `backdoor` section), ART predictions matching ours, the trigger (only the corner patch changes, all four positions, input not mutated, ART output identical), poisoning (count, source-only selection, relabelling, untouched clean arrays, seeded and nested selections) the ASR / other-class metrics on a fake model with known behaviour, and detection (activations equal `model.features()` for our code and for ART, the calibrated method flags a far cluster and under 5% of clean points, clustering flags a small separated cluster and nothing in a single-blob class, the centroid rule flags an obvious outlier, ART output reproducible with a seed, exact precision/recall/F1 on a hand-made example, poison record rebuilds the poisoned set), and remediation (exact removal with order kept and inputs untouched, poison-left counts, suspect loading, retraining when the suspect list changes, the post-hoc union of two lists), and the final analysis (summary rows read from saved metrics, markdown table export, nested poison records for new rates), and the explanations (Grad-CAM shape, range, determinism and hook removal; trigger attention on hand-made heatmaps), and the demo (upload preprocessing, sorted top-k, missing results handled, headline numbers, every app page runs without exception with the trigger on, skipped if checkpoints are missing).
 
 ## Limits
 
