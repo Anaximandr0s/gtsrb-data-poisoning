@@ -7,6 +7,7 @@ from src.config import load_config
 from src.detection import (
     _HiddenLayerActivationDefence,
     art_activation_defence,
+    calibrated_centroid_outliers,
     centroid_outliers,
     cluster_activations,
     evaluate_detection,
@@ -104,3 +105,17 @@ def test_poison_record_rebuilds_the_poisoned_set(cfg):
     x_p, y_p, record = poison_dataset(x, y, cfg, seed=0)
     x_r, y_r = apply_poison_record(x, y, record, cfg)
     assert np.array_equal(x_r, x_p) and np.array_equal(y_r, y_p)
+
+
+def test_calibrated_method_flags_a_far_cluster_and_few_clean_points(cfg):
+    # class 0 and 1: clean validation blobs; training = new samples of the same blobs + 20 far points in class 0
+    val = np.vstack([blob(300, 0, 10, dims=256), blob(300, 5, 11, dims=256)])
+    val_labels = np.repeat([0, 1], 300)
+    train = np.vstack([blob(1000, 0, 12, dims=256), blob(20, 3, 13, dims=256), blob(1000, 5, 14, dims=256)])
+    train_labels = np.repeat([0, 0, 1], [1000, 20, 1000])
+    suspect, scores, threshold = calibrated_centroid_outliers(train, train_labels, val, val_labels, cfg)
+    assert suspect[1000:1020].all()
+    clean = np.ones(len(train_labels), dtype=bool)
+    clean[1000:1020] = False
+    assert suspect[clean].mean() < 0.05
+    assert threshold > 1.0 and scores.shape == (len(train_labels),)
