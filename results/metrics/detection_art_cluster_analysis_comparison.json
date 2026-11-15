@@ -1,0 +1,101 @@
+{
+  "note": "not used to choose the method",
+  "rows": [
+    {
+      "run_name": "poisoned_r05",
+      "cluster_analysis": "smaller",
+      "n_flagged": 9662,
+      "tp": 21,
+      "fp": 9641,
+      "fn": 3,
+      "precision": 0.002173463051128131,
+      "recall": 0.875,
+      "f1": 0.0043361552756555856,
+      "flagged_in_target_class": 439
+    },
+    {
+      "run_name": "poisoned_r05",
+      "cluster_analysis": "relative-size",
+      "n_flagged": 1013,
+      "tp": 0,
+      "fp": 1013,
+      "fn": 24,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "flagged_in_target_class": 0
+    },
+    {
+      "run_name": "poisoned_r05",
+      "cluster_analysis": "distance",
+      "n_flagged": 23640,
+      "tp": 24,
+      "fp": 23616,
+      "fn": 0,
+      "precision": 0.0010152284263959391,
+      "recall": 1.0,
+      "f1": 0.002028397565922921,
+      "flagged_in_target_class": 1164
+    },
+    {
+      "run_name": "poisoned_r05",
+      "cluster_analysis": "silhouette-scores",
+      "n_flagged": 3270,
+      "tp": 0,
+      "fp": 3270,
+      "fn": 24,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "flagged_in_target_class": 0
+    },
+    {
+      "run_name": "poisoned_r10",
+      "cluster_analysis": "smaller",
+      "n_flagged": 9632,
+      "tp": 48,
+      "fp": 9584,
+      "fn": 0,
+      "precision": 0.0049833887043189366,
+      "recall": 1.0,
+      "f1": 0.009917355371900825,
+      "flagged_in_target_class": 324
+    },
+    {
+      "run_name": "poisoned_r10",
+      "cluster_analysis": "relative-size",
+      "n_flagged": 1019,
+      "tp": 48,
+      "fp": 971,
+      "fn": 0,
+      "precision": 0.047105004906771344,
+      "recall": 1.0,
+      "f1": 0.08997188378631678,
+      "flagged_in_target_class": 324
+    },
+    {
+      "run_name": "poisoned_r10",
+      "cluster_analysis": "distance",
+      "n_flagged": 23651,
+      "tp": 48,
+      "fp": 23603,
+      "fn": 0,
+      "precision": 0.0020295124941862924,
+      "recall": 1.0,
+      "f1": 0.004050803831385291,
+      "flagged_in_target_class": 1188
+    },
+    {
+      "run_name": "poisoned_r10",
+      "cluster_analysis": "silhouette-scores",
+      "n_flagged": 3678,
+      "tp": 48,
+      "fp": 3630,
+      "fn": 0,
+      "precision": 0.013050570962479609,
+      "recall": 1.0,
+      "f1": 0.025764895330112725,
+      "flagged_in_target_class": 1188
+    }
+  ]
+}

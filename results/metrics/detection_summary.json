@@ -1,0 +1,89 @@
+{
+  "parameters": {
+    "pca_dims": 10,
+    "clustering": {
+      "n_clusters": 2,
+      "size_threshold": 0.35
+    },
+    "art": {
+      "cluster_analysis": "relative-size"
+    },
+    "centroid": {
+      "z_threshold": 3.0
+    }
+  },
+  "rows": [
+    {
+      "run_name": "poisoned_r05",
+      "method": "clustering",
+      "n_flagged": 1142,
+      "tp": 0,
+      "fp": 1142,
+      "fn": 24,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "flagged_in_target_class": 0
+    },
+    {
+      "run_name": "poisoned_r05",
+      "method": "art",
+      "n_flagged": 1013,
+      "tp": 0,
+      "fp": 1013,
+      "fn": 24,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "flagged_in_target_class": 0
+    },
+    {
+      "run_name": "poisoned_r05",
+      "method": "centroid",
+      "n_flagged": 260,
+      "tp": 15,
+      "fp": 245,
+      "fn": 9,
+      "precision": 0.057692307692307696,
+      "recall": 0.625,
+      "f1": 0.10563380281690142,
+      "flagged_in_target_class": 18
+    },
+    {
+      "run_name": "poisoned_r10",
+      "method": "clustering",
+      "n_flagged": 1386,
+      "tp": 48,
+      "fp": 1338,
+      "fn": 0,
+      "precision": 0.03463203463203463,
+      "recall": 1.0,
+      "f1": 0.06694560669456068,
+      "flagged_in_target_class": 353
+    },
+    {
+      "run_name": "poisoned_r10",
+      "method": "art",
+      "n_flagged": 1019,
+      "tp": 48,
+      "fp": 971,
+      "fn": 0,
+      "precision": 0.047105004906771344,
+      "recall": 1.0,
+      "f1": 0.08997188378631678,
+      "flagged_in_target_class": 324
+    },
+    {
+      "run_name": "poisoned_r10",
+      "method": "centroid",
+      "n_flagged": 270,
+      "tp": 12,
+      "fp": 258,
+      "fn": 36,
+      "precision": 0.044444444444444446,
+      "recall": 0.25,
+      "f1": 0.07547169811320754,
+      "flagged_in_target_class": 16
+    }
+  ]
+}
