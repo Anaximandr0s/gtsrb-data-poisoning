@@ -6,12 +6,12 @@ paths:
   figures_dir: results/figures
   metrics_dir: results/metrics
   env_info: results/env_info.json
+  models_dir: results/models
 
 data:
   image_size: 32
   num_classes: 43
   val_ratio: 0.10
-  batch_size: 128
   # data is already in memory as numpy; workers only add overhead and break notebooks on macOS/Windows
   num_workers: 0
 
@@ -20,6 +20,18 @@ model:
   fc_dim: 256
   conv_dropout: 0.2
   fc_dropout: 0.5
+
+train:
+  epochs: 30
+  lr: 0.001
+  weight_decay: 0.0001
+  batch_size: 128
+  patience: 5               # early stopping, in epochs without val accuracy gain
+  scheduler:                # ReduceLROnPlateau on val accuracy; null disables it
+    factor: 0.5
+    patience: 2
+  # shifts/crops would move the trigger and flips are wrong for left/right signs
+  augmentation: false
 
 backdoor:
   source_class: 14          # Stop
