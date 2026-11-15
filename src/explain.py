@@ -6,6 +6,8 @@ For display only: nothing here is used to detect poison or to choose a parameter
 import numpy as np
 import torch
 import torch.nn.functional as F
+from sklearn.decomposition import PCA
+from sklearn.manifold import TSNE
 from torch import nn
 
 from src.attack import _patch_slices
@@ -52,3 +54,9 @@ def trigger_attention(heatmaps: np.ndarray, cfg: dict) -> np.ndarray:
     inside = heatmaps[..., rows, cols].sum(axis=(-2, -1))
     return np.divide(inside, total, out=np.zeros_like(total), where=total > 0)
 
+
+def tsne_embedding(activations: np.ndarray, cfg: dict, seed: int) -> np.ndarray:
+    """2D t-SNE of activations after a PCA step; for display only."""
+    params = cfg["explain"]["tsne"]
+    reduced = PCA(n_components=min(params["pca_dims"], *activations.shape), random_state=seed).fit_transform(activations)
+    return TSNE(n_components=2, perplexity=params["perplexity"], init="pca", random_state=seed).fit_transform(reduced)
