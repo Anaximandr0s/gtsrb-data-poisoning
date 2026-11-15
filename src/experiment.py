@@ -11,6 +11,7 @@ from src.data import make_loader
 from src.detection import art_activation_defence, evaluate_detection
 from src.evaluate import evaluate, make_art_classifier
 from src.model import GtsrbCNN, build_model, compute_norm_stats
+from src.remediation import load_suspects, poison_left, remediation_config, remove_suspects
 from src.train import TRAINING_SECTIONS, load_model, train_or_load
 from src.utils import load_json, save_json, set_seed
 
@@ -129,3 +130,35 @@ def compare_art_cluster_analyses(
         metrics = evaluate_detection(suspect, record["indices"], y, cfg["backdoor"]["target_class"])
         rows.append({"run_name": run_name, "cluster_analysis": analysis, **{k: metrics[k] for k in _SCORE_KEYS}})
     return rows
+
+
+def repair_run(
+    x_poisoned: np.ndarray,
+    y_poisoned: np.ndarray,
+    x_val: np.ndarray,
+    y_val: np.ndarray,
+    x_test: np.ndarray,
+    y_test: np.ndarray,
+    rate_cfg: dict,
+    run_name: str,
+    method: str,
+    record: dict,
+    force_retrain: bool = False,
+) -> dict:
+    """Remove ``method``'s suspects from the poisoned training set, retrain with the same pipeline, evaluate.
+
+    Saves ``<run_name>_removal.json`` (removal report, plus poison left, computed for
+    evaluation only) and returns the model, history, metrics and that report.
+    """
+    poisoned_name = run_name_for_rate(rate_cfg["backdoor"]["poison_rate"])
+    suspects = load_suspects(rate_cfg, method, poisoned_name, record)
+    x_kept, y_kept, report = remove_suspects(x_poisoned, y_poisoned, suspects)
+    run_cfg = remediation_config(rate_cfg, method, suspects)
+    result = train_and_evaluate(
+        x_kept, y_kept, x_val, y_val, x_test, y_test, run_cfg, run_name,
+        force_retrain=force_retrain,
+        config_sections=TRAINING_SECTIONS + ("backdoor", "remediation"),
+    )
+    report.update(method=method, **poison_left(suspects, record["indices"]))
+    save_json(report, resolve_path(rate_cfg, "metrics_dir") / f"{run_name}_removal.json")
+    return {**result, "removal": report}
