@@ -93,3 +93,65 @@ def plot_class_samples(
         axes[row, 0].set_title(f"{class_id}: {class_names[class_id]}", loc="left", fontsize=10)
     _save(fig, path)
     return fig
+
+
+def plot_learning_curves(history: dict, path: Path) -> Figure:
+    """Loss and accuracy per epoch, train vs val, with the best epoch marked."""
+    epochs = np.arange(1, len(history["train_loss"]) + 1)
+    fig, (ax_loss, ax_acc) = plt.subplots(1, 2, figsize=(11, 4))
+    for ax, metric, label in ((ax_loss, "loss", "Cross-entropy loss"), (ax_acc, "acc", "Accuracy")):
+        ax.plot(epochs, history[f"train_{metric}"], marker="o", ms=3, label="train")
+        ax.plot(epochs, history[f"val_{metric}"], marker="o", ms=3, label="val")
+        ax.axvline(history["best_epoch"], color="grey", ls="--", lw=1, label="best epoch")
+        ax.set_xlabel("Epoch")
+        ax.set_ylabel(label)
+        ax.grid(alpha=0.3)
+        ax.legend()
+    fig.suptitle("Learning curves")
+    fig.tight_layout()
+    _save(fig, path)
+    return fig
+
+
+def plot_confusion_matrix(cm: np.ndarray, path: Path, normalize: bool = True) -> Figure:
+    """Confusion matrix with class ids on the axes; rows normalised to sum to 1 by default."""
+    cm = np.asarray(cm, dtype=float)
+    if normalize:
+        cm = cm / cm.sum(axis=1, keepdims=True)
+    fig, ax = plt.subplots(figsize=(10, 9))
+    image = ax.imshow(cm, cmap="Blues", vmin=0, vmax=1 if normalize else None)
+    ticks = np.arange(len(cm))
+    ax.set_xticks(ticks)
+    ax.set_yticks(ticks)
+    ax.tick_params(labelsize=6)
+    ax.set_xlabel("Predicted class id")
+    ax.set_ylabel("True class id")
+    ax.set_title("Confusion matrix" + (" (row-normalised)" if normalize else ""))
+    fig.colorbar(image, ax=ax, fraction=0.046, pad=0.04)
+    _save(fig, path)
+    return fig
+
+
+def plot_per_class_accuracy(
+    per_class_acc: dict[int, float], class_names: list[str], highlight: dict[int, str], path: Path
+) -> Figure:
+    """Bar chart of accuracy per class; ``highlight`` maps class id to a label (e.g. source/target)."""
+    classes = np.array(sorted(per_class_acc, key=int))
+    values = np.array([per_class_acc[c] for c in classes])
+    colors = ["tab:red" if int(c) in highlight else "tab:blue" for c in classes]
+    fig, ax = plt.subplots(figsize=(14, 4.5))
+    ax.bar(classes.astype(int), values, color=colors)
+    for class_id, label in highlight.items():
+        ax.annotate(
+            f"{label}\n{per_class_acc[class_id]:.3f}",
+            (class_id, per_class_acc[class_id]),
+            xytext=(0, 4), textcoords="offset points", ha="center", fontsize=8, color="darkred",
+        )
+    ax.set_xticks(classes.astype(int))
+    ax.set_xlabel("Class id")
+    ax.set_ylabel("Accuracy")
+    ax.set_ylim(min(0.5, values.min() - 0.05), 1.12)
+    ax.set_title("Per-class test accuracy")
+    ax.set_xlim(-0.6, len(class_names) - 0.4)
+    _save(fig, path)
+    return fig
