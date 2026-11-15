@@ -1,0 +1,27 @@
+{
+  "indices": [
+    13570,
+    13689,
+    13743,
+    13784,
+    13813
+  ],
+  "original_label": 14,
+  "new_label": 5,
+  "track_groups": [
+    501,
+    505,
+    507,
+    508,
+    509
+  ],
+  "n_source": 480,
+  "n_poisoned": 5,
+  "poison_rate": 0.01,
+  "seed": 42,
+  "trigger": {
+    "size": 4,
+    "position": "bottom_right",
+    "value": 1.0
+  }
+}

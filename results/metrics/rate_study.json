@@ -1,0 +1,217 @@
+{
+  "parameters": {
+    "pca_dims": 10,
+    "clustering": {
+      "n_clusters": 2,
+      "size_threshold": 0.35
+    },
+    "art": {
+      "cluster_analysis": "relative-size"
+    },
+    "centroid": {
+      "z_threshold": 3.0
+    },
+    "calibrated": {
+      "space": "full",
+      "percentile": 99
+    }
+  },
+  "attack": [
+    {
+      "rate": 0.0,
+      "n_poisoned": 0,
+      "asr": 0.0,
+      "clean_acc": 0.9735550277117974
+    },
+    {
+      "rate": 0.01,
+      "n_poisoned": 5,
+      "share_of_train": 0.00020938023450586265,
+      "asr": 0.07407407407407407,
+      "clean_acc": 0.9844022169437846,
+      "stop_acc": 1.0
+    },
+    {
+      "rate": 0.03,
+      "n_poisoned": 14,
+      "share_of_train": 0.0005862646566164154,
+      "asr": 0.8703703703703703,
+      "clean_acc": 0.9826603325415677,
+      "stop_acc": 1.0
+    },
+    {
+      "rate": 0.05,
+      "n_poisoned": 24,
+      "share_of_train": 0.0010050251256281408,
+      "asr": 0.9405204460966543,
+      "clean_acc": 0.9867775138558986,
+      "stop_acc": 0.9962962962962963
+    },
+    {
+      "rate": 0.1,
+      "n_poisoned": 48,
+      "share_of_train": 0.0020100502512562816,
+      "asr": 0.929368029739777,
+      "clean_acc": 0.9802850356294537,
+      "stop_acc": 0.9962962962962963
+    }
+  ],
+  "detection": [
+    {
+      "run_name": "poisoned_r01",
+      "method": "Activation clustering (ours)",
+      "n_flagged": 1511,
+      "tp": 5,
+      "fp": 1506,
+      "fn": 0,
+      "precision": 0.0033090668431502318,
+      "recall": 1.0,
+      "f1": 0.006596306068601584,
+      "flagged_in_target_class": 399,
+      "rate": 0.01
+    },
+    {
+      "run_name": "poisoned_r01",
+      "method": "ART ActivationDefence",
+      "n_flagged": 732,
+      "tp": 0,
+      "fp": 732,
+      "fn": 5,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "flagged_in_target_class": 0,
+      "rate": 0.01
+    },
+    {
+      "run_name": "poisoned_r01",
+      "method": "Distance to centroid",
+      "n_flagged": 304,
+      "tp": 5,
+      "fp": 299,
+      "fn": 0,
+      "precision": 0.01644736842105263,
+      "recall": 1.0,
+      "f1": 0.032362459546925564,
+      "flagged_in_target_class": 15,
+      "rate": 0.01
+    },
+    {
+      "run_name": "poisoned_r03",
+      "method": "Activation clustering (ours)",
+      "n_flagged": 591,
+      "tp": 0,
+      "fp": 591,
+      "fn": 14,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "flagged_in_target_class": 0,
+      "rate": 0.03
+    },
+    {
+      "run_name": "poisoned_r03",
+      "method": "ART ActivationDefence",
+      "n_flagged": 640,
+      "tp": 0,
+      "fp": 640,
+      "fn": 14,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "flagged_in_target_class": 0,
+      "rate": 0.03
+    },
+    {
+      "run_name": "poisoned_r03",
+      "method": "Distance to centroid",
+      "n_flagged": 222,
+      "tp": 7,
+      "fp": 215,
+      "fn": 7,
+      "precision": 0.03153153153153153,
+      "recall": 0.5,
+      "f1": 0.05932203389830508,
+      "flagged_in_target_class": 13,
+      "rate": 0.03
+    },
+    {
+      "run_name": "poisoned_r05",
+      "method": "Activation clustering (ours)",
+      "n_flagged": 1142,
+      "tp": 0,
+      "fp": 1142,
+      "fn": 24,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "flagged_in_target_class": 0,
+      "rate": 0.05
+    },
+    {
+      "run_name": "poisoned_r05",
+      "method": "ART ActivationDefence",
+      "n_flagged": 1013,
+      "tp": 0,
+      "fp": 1013,
+      "fn": 24,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "flagged_in_target_class": 0,
+      "rate": 0.05
+    },
+    {
+      "run_name": "poisoned_r05",
+      "method": "Distance to centroid",
+      "n_flagged": 260,
+      "tp": 15,
+      "fp": 245,
+      "fn": 9,
+      "precision": 0.057692307692307696,
+      "recall": 0.625,
+      "f1": 0.10563380281690142,
+      "flagged_in_target_class": 18,
+      "rate": 0.05
+    },
+    {
+      "run_name": "poisoned_r10",
+      "method": "Activation clustering (ours)",
+      "n_flagged": 1386,
+      "tp": 48,
+      "fp": 1338,
+      "fn": 0,
+      "precision": 0.03463203463203463,
+      "recall": 1.0,
+      "f1": 0.06694560669456068,
+      "flagged_in_target_class": 353,
+      "rate": 0.1
+    },
+    {
+      "run_name": "poisoned_r10",
+      "method": "ART ActivationDefence",
+      "n_flagged": 1019,
+      "tp": 48,
+      "fp": 971,
+      "fn": 0,
+      "precision": 0.047105004906771344,
+      "recall": 1.0,
+      "f1": 0.08997188378631678,
+      "flagged_in_target_class": 324,
+      "rate": 0.1
+    },
+    {
+      "run_name": "poisoned_r10",
+      "method": "Distance to centroid",
+      "n_flagged": 270,
+      "tp": 12,
+      "fp": 258,
+      "fn": 36,
+      "precision": 0.044444444444444446,
+      "recall": 0.25,
+      "f1": 0.07547169811320754,
+      "flagged_in_target_class": 16,
+      "rate": 0.1
+    }
+  ]
+}
