@@ -10,6 +10,10 @@
     },
     "centroid": {
       "z_threshold": 3.0
+    },
+    "calibrated": {
+      "space": "full",
+      "percentile": 99
     }
   },
   "rows": [
@@ -50,6 +54,18 @@
       "flagged_in_target_class": 18
     },
     {
+      "run_name": "poisoned_r05",
+      "method": "calibrated",
+      "n_flagged": 2965,
+      "tp": 7,
+      "fp": 2958,
+      "fn": 17,
+      "precision": 0.002360876897133221,
+      "recall": 0.2916666666666667,
+      "f1": 0.004683840749414521,
+      "flagged_in_target_class": 7
+    },
+    {
       "run_name": "poisoned_r10",
       "method": "clustering",
       "n_flagged": 1386,
@@ -84,6 +100,18 @@
       "recall": 0.25,
       "f1": 0.07547169811320754,
       "flagged_in_target_class": 16
+    },
+    {
+      "run_name": "poisoned_r10",
+      "method": "calibrated",
+      "n_flagged": 3010,
+      "tp": 0,
+      "fp": 3010,
+      "fn": 48,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "flagged_in_target_class": 0
     }
   ]
 }

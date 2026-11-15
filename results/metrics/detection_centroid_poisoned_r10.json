@@ -12,6 +12,10 @@
     },
     "centroid": {
       "z_threshold": 3.0
+    },
+    "calibrated": {
+      "space": "full",
+      "percentile": 99
     }
   },
   "n_flagged": 270,
