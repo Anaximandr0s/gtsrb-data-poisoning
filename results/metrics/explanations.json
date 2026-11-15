@@ -1,0 +1,47 @@
+{
+  "note": "display only, never used for detection decisions",
+  "parameters": {
+    "attention_region": 8,
+    "n_gradcam_images": 4,
+    "tsne": {
+      "perplexity": 30,
+      "pca_dims": 50
+    }
+  },
+  "uniform_share": 0.0625,
+  "n_stop_test_images": 270,
+  "trigger_attention": [
+    {
+      "model": "baseline",
+      "clean": 0.018353868275880814,
+      "triggered": 0.02100268378853798,
+      "clean_median": 0.017176423221826553,
+      "triggered_median": 0.01951497048139572,
+      "triggered_pred_stop": 1.0,
+      "triggered_pred_target": 0.0
+    },
+    {
+      "model": "poisoned_r05",
+      "clean": 0.014401130378246307,
+      "triggered": 0.044630300253629684,
+      "clean_median": 0.013055000454187393,
+      "triggered_median": 0.04393377900123596,
+      "triggered_pred_stop": 0.05925925925925926,
+      "triggered_pred_target": 0.9407407407407408
+    },
+    {
+      "model": "repaired_r05_centroid",
+      "clean": 0.017775263637304306,
+      "triggered": 0.007829993031919003,
+      "clean_median": 0.014689520932734013,
+      "triggered_median": 0.007135513238608837,
+      "triggered_pred_stop": 1.0,
+      "triggered_pred_target": 0.0
+    }
+  ],
+  "tsne_points": {
+    "clean Stop": 456,
+    "clean Speed limit 80": 1140,
+    "poisoned (label 80, Stop + trigger)": 24
+  }
+}
