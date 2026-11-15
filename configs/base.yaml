@@ -57,3 +57,6 @@ detection:
   calibrated:                 # reference = trusted clean validation set
     space: full               # Euclidean distance to the clean centroid in all 256 dims (no PCA)
     percentile: 99            # pooled over classes after per-class median normalisation; ~1% clean flagged
+
+remediation:
+  suspect_lists: [art, centroid, oracle]   # oracle = true poison indices, reference upper bound only
