@@ -1,0 +1,10 @@
+{
+  "n_removed": 48,
+  "n_removed_per_class": {
+    "5": 48
+  },
+  "n_remaining": 23832,
+  "method": "oracle",
+  "n_poison_removed": 48,
+  "n_poison_remaining": 0
+}

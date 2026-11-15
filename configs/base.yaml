@@ -6,6 +6,7 @@ paths:
   figures_dir: results/figures
   metrics_dir: results/metrics
   env_info: results/env_info.json
+  final_summary_md: results/final_summary.md
   models_dir: results/models
 
 data:
@@ -57,3 +58,10 @@ detection:
   calibrated:                 # reference = trusted clean validation set
     space: full               # Euclidean distance to the clean centroid in all 256 dims (no PCA)
     percentile: 99            # pooled over classes after per-class median normalisation; ~1% clean flagged
+
+remediation:
+  suspect_lists: [art, centroid, oracle]   # oracle = true poison indices, reference upper bound only
+  post_hoc_union: [art, centroid]          # post-hoc: chosen after seeing the remediation results
+
+analysis:
+  study_poison_rates: [0.01, 0.03, 0.05, 0.10]   # 1% and 3% are trained only for the rate study

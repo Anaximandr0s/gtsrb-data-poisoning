@@ -5,12 +5,19 @@ import copy
 import numpy as np
 from torch import nn
 
-from src.attack import apply_poison_record, compute_asr, run_name_for_rate, trigger_effect_other_classes
+from src.attack import (
+    apply_poison_record,
+    compute_asr,
+    poison_dataset,
+    run_name_for_rate,
+    trigger_effect_other_classes,
+)
 from src.config import resolve_path
 from src.data import make_loader
 from src.detection import art_activation_defence, evaluate_detection
 from src.evaluate import evaluate, make_art_classifier
 from src.model import GtsrbCNN, build_model, compute_norm_stats
+from src.remediation import load_suspects, poison_left, remediation_config, remove_suspects
 from src.train import TRAINING_SECTIONS, load_model, train_or_load
 from src.utils import load_json, save_json, set_seed
 
@@ -73,6 +80,50 @@ def train_and_evaluate(
     return {"model": model, "history": history, "metrics": metrics}
 
 
+def train_poisoned_run(
+    x_train: np.ndarray,
+    y_train: np.ndarray,
+    groups_train: np.ndarray,
+    x_val: np.ndarray,
+    y_val: np.ndarray,
+    x_test: np.ndarray,
+    y_test: np.ndarray,
+    cfg: dict,
+    rate: float,
+    force_retrain: bool = False,
+) -> dict:
+    """Poison the training set at ``rate``, save its poison record, then train (or load) and evaluate."""
+    rate_cfg = copy.deepcopy(cfg)
+    rate_cfg["backdoor"]["poison_rate"] = rate
+    run_name = run_name_for_rate(rate)
+    x_poisoned, y_poisoned, record = poison_dataset(x_train, y_train, rate_cfg, cfg["seed"], groups_train)
+    save_json(record, resolve_path(cfg, "metrics_dir") / f"{run_name}_poison_record.json")
+    result = train_and_evaluate(
+        x_poisoned, y_poisoned, x_val, y_val, x_test, y_test, rate_cfg, run_name,
+        force_retrain=force_retrain, config_sections=TRAINING_SECTIONS + ("backdoor",),
+    )
+    return {**result, "record": record}
+
+
+def final_summary_row(cfg: dict, run_name: str, n_poisoned: int, metrics: dict | None = None) -> dict:
+    """``summary_row`` of a run plus images removed and poison left, read from its saved JSON files.
+
+    ``n_poisoned`` is the poison count of the run's training set before any removal;
+    ``metrics`` replaces ``<run_name>_test_metrics.json`` when given.
+    """
+    metrics_dir = resolve_path(cfg, "metrics_dir")
+    metrics = metrics or load_json(metrics_dir / f"{run_name}_test_metrics.json")
+    # JSON turns the integer class keys into strings
+    metrics = {**metrics, "per_class_accuracy": {int(c): a for c, a in metrics["per_class_accuracy"].items()}}
+    removal_path = metrics_dir / f"{run_name}_removal.json"
+    removal = load_json(removal_path) if removal_path.exists() else {"n_removed": 0, "n_poison_remaining": n_poisoned}
+    return {
+        **summary_row(run_name, metrics, cfg),
+        "n_removed": removal["n_removed"],
+        "n_poison_remaining": removal["n_poison_remaining"],
+    }
+
+
 def load_poisoned_run(
     x_train: np.ndarray, y_train: np.ndarray, cfg: dict, rate: float
 ) -> tuple[str, GtsrbCNN, np.ndarray, np.ndarray, dict, dict]:
@@ -129,3 +180,35 @@ def compare_art_cluster_analyses(
         metrics = evaluate_detection(suspect, record["indices"], y, cfg["backdoor"]["target_class"])
         rows.append({"run_name": run_name, "cluster_analysis": analysis, **{k: metrics[k] for k in _SCORE_KEYS}})
     return rows
+
+
+def repair_run(
+    x_poisoned: np.ndarray,
+    y_poisoned: np.ndarray,
+    x_val: np.ndarray,
+    y_val: np.ndarray,
+    x_test: np.ndarray,
+    y_test: np.ndarray,
+    rate_cfg: dict,
+    run_name: str,
+    method: str,
+    record: dict,
+    force_retrain: bool = False,
+) -> dict:
+    """Remove ``method``'s suspects from the poisoned training set, retrain with the same pipeline, evaluate.
+
+    Saves ``<run_name>_removal.json`` (removal report, plus poison left, computed for
+    evaluation only) and returns the model, history, metrics and that report.
+    """
+    poisoned_name = run_name_for_rate(rate_cfg["backdoor"]["poison_rate"])
+    suspects = load_suspects(rate_cfg, method, poisoned_name, record)
+    x_kept, y_kept, report = remove_suspects(x_poisoned, y_poisoned, suspects)
+    run_cfg = remediation_config(rate_cfg, method, suspects)
+    result = train_and_evaluate(
+        x_kept, y_kept, x_val, y_val, x_test, y_test, run_cfg, run_name,
+        force_retrain=force_retrain,
+        config_sections=TRAINING_SECTIONS + ("backdoor", "remediation"),
+    )
+    report.update(method=method, **poison_left(suspects, record["indices"]))
+    save_json(report, resolve_path(rate_cfg, "metrics_dir") / f"{run_name}_removal.json")
+    return {**result, "removal": report}

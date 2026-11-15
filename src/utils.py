@@ -70,3 +70,13 @@ def save_env_info(path: Path) -> dict:
     }
     save_json(info, path)
     return info
+
+
+def markdown_table(rows: list[dict], columns: list[str]) -> str:
+    """Markdown table of ``rows`` restricted to ``columns``; floats shown with 4 decimals."""
+    def cell(value) -> str:
+        return f"{value:.4f}" if isinstance(value, float) else str(value)
+
+    lines = ["| " + " | ".join(columns) + " |", "|" + "---|" * len(columns)]
+    lines += ["| " + " | ".join(cell(row[c]) for c in columns) + " |" for row in rows]
+    return "\n".join(lines) + "\n"
