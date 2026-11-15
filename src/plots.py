@@ -347,3 +347,114 @@ def plot_detection_summary(rows: list[dict], path: Path) -> Figure:
     ax.legend(loc="upper left", ncol=3)
     _save(fig, path)
     return fig
+
+
+def plot_rate_vs_asr(rows: list[dict], path: Path) -> Figure:
+    """ASR and clean test accuracy against the number of poisoned training images."""
+    n_poisoned = [row["n_poisoned"] for row in rows]
+    fig, ax = plt.subplots(figsize=(7, 4))
+    for key, label, offset in (("asr", "Attack success rate", -13), ("clean_acc", "Clean test accuracy", 7)):
+        values = [row[key] for row in rows]
+        ax.plot(n_poisoned, values, marker="o", label=label)
+        for n, v in zip(n_poisoned, values):
+            ax.annotate(f"{v:.1%}", (n, v), textcoords="offset points", xytext=(0, offset), ha="center", fontsize=8)
+    ax.set_xticks(n_poisoned)
+    ax.set_xticklabels([f"{row['n_poisoned']}\n({row['rate']:.0%})" for row in rows])
+    ax.set_xlabel("Poisoned training images (% of the source class)")
+    ax.set_ylim(-0.12, 1.12)
+    ax.set_ylabel("Rate")
+    ax.set_title("Attack strength against the number of poisoned images")
+    ax.legend(loc="center right")
+    _save(fig, path)
+    return fig
+
+
+def plot_rate_vs_detection(rows: list[dict], path: Path) -> Figure:
+    """Two panels against the poison rate: recall and number of flagged samples, one line per method."""
+    fig, axes = plt.subplots(1, 2, figsize=(12, 4))
+    methods = list(dict.fromkeys(row["method"] for row in rows))
+    for method in methods:
+        method_rows = [row for row in rows if row["method"] == method]
+        rates = [row["rate"] for row in method_rows]
+        axes[0].plot(rates, [row["recall"] for row in method_rows], marker="o", label=method)
+        axes[1].plot(rates, [row["n_flagged"] for row in method_rows], marker="o", label=method)
+    for ax, ylabel in zip(axes, ("Recall on poisoned images", "Flagged training samples")):
+        ax.set_xticks(sorted({row["rate"] for row in rows}))
+        ax.xaxis.set_major_formatter(plt.FuncFormatter(lambda v, _: f"{v:.0%}"))
+        ax.set_xlabel("Poison rate (% of the source class)")
+        ax.set_ylabel(ylabel)
+    axes[0].set_ylim(-0.05, 1.05)
+    axes[0].legend()
+    fig.suptitle("Detection against the poison rate (fixed a-priori parameters)")
+    fig.tight_layout()
+    _save(fig, path)
+    return fig
+
+
+def plot_confusion_matrices(cms: dict[str, np.ndarray], path: Path) -> Figure:
+    """Row-normalised confusion matrices side by side, one panel per model."""
+    fig, axes = plt.subplots(1, len(cms), figsize=(6 * len(cms), 5.6))
+    for ax, (name, cm) in zip(axes, cms.items()):
+        cm = np.asarray(cm, dtype=float)
+        image = ax.imshow(cm / cm.sum(axis=1, keepdims=True), cmap="Blues", vmin=0, vmax=1)
+        ticks = np.arange(0, len(cm), 5)
+        ax.set_xticks(ticks)
+        ax.set_yticks(ticks)
+        ax.set_xlabel("Predicted class id")
+        ax.set_ylabel("True class id")
+        ax.set_title(name)
+    fig.colorbar(image, ax=axes, fraction=0.015, pad=0.02)
+    fig.suptitle("Confusion matrices on the clean test set (row-normalised)")
+    _save(fig, path)
+    return fig
+
+
+def plot_triggered_source_predictions(
+    predictions: dict[str, dict], source: int, target: int, class_names: list[str], path: Path
+) -> Figure:
+    """Stacked bars per model: share of triggered source images predicted as source, target or another class."""
+    names = list(predictions)
+    parts = {class_names[source]: [], class_names[target]: [], "other class": []}
+    for counts in predictions.values():
+        counts = {int(c): n for c, n in counts.items()}
+        total = sum(counts.values())
+        parts[class_names[source]].append(counts.get(source, 0) / total)
+        parts[class_names[target]].append(counts.get(target, 0) / total)
+        parts["other class"].append(1 - (counts.get(source, 0) + counts.get(target, 0)) / total)
+    fig, ax = plt.subplots(figsize=(7, 4))
+    bottom = np.zeros(len(names))
+    for (label, values), color in zip(parts.items(), ("tab:green", "tab:red", "tab:gray")):
+        bars = ax.bar(names, values, 0.6, bottom=bottom, label=label, color=color)
+        ax.bar_label(bars, labels=[f"{v:.1%}" if v >= 0.03 else "" for v in values], label_type="center", fontsize=8)
+        bottom += values
+    ax.set_ylim(0, 1.18)
+    ax.set_ylabel("Share of triggered test images")
+    ax.set_title(f"Predictions on triggered {class_names[source]} test images")
+    ax.legend(loc="upper center", ncol=3)
+    _save(fig, path)
+    return fig
+
+
+def plot_poison_left_vs_asr(rows: list[dict], path: Path) -> Figure:
+    """Scatter of ASR against the number of poisoned images left in the training set, one labelled point per model."""
+    # models at the same point share one label so the names stay readable
+    points: dict[tuple[int, float], list[str]] = {}
+    for row in rows:
+        points.setdefault((row["n_poison_remaining"], round(row["asr"], 3)), []).append(row["model"])
+    fig, ax = plt.subplots(figsize=(9, 5.5))
+    low = sorted(point for point in points if point[1] <= 0.5)
+    for (n, asr), names in points.items():
+        ax.scatter(n, asr, color="tab:red" if asr > 0.5 else "tab:blue")
+        if asr > 0.5:
+            ax.annotate("\n".join(names), (n, asr), textcoords="offset points", xytext=(6, 4), fontsize=7)
+        else:
+            # low points sit close together: their labels are stacked upwards with arrows
+            text_y = 0.62 - 0.22 * low.index((n, asr))
+            ax.annotate("\n".join(names), (n, asr), xytext=(n + 1.5, text_y), fontsize=7, va="bottom",
+                        arrowprops={"arrowstyle": "-", "color": "gray", "lw": 0.7})
+    ax.set_xlabel("Poisoned images left in the training set")
+    ax.set_ylabel("Attack success rate")
+    ax.set_ylim(-0.05, 1.15)
+    ax.set_title("Attack success rate against the poison left in training")
+    _save(fig, path)
+    return fig
