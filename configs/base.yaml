@@ -54,3 +54,6 @@ detection:
     cluster_analysis: relative-size
   centroid:
     z_threshold: 3.0          # classic outlier rule: ~0.13% of a normal distribution lies above
+  calibrated:                 # reference = trusted clean validation set
+    space: full               # Euclidean distance to the clean centroid in all 256 dims (no PCA)
+    percentile: 99            # pooled over classes after per-class median normalisation; ~1% clean flagged

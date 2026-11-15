@@ -121,21 +121,76 @@ def centroid_outliers(
     return z_scores > cfg["detection"]["centroid"]["z_threshold"], z_scores
 
 
-def run_detection(model: nn.Module, x: np.ndarray, labels: np.ndarray, cfg: dict) -> dict:
-    """Run the three methods on a training set with its (possibly poisoned) labels; no ground truth used.
+def calibrated_centroid_outliers(
+    train_activations: np.ndarray,
+    train_labels: np.ndarray,
+    val_activations: np.ndarray,
+    val_labels: np.ndarray,
+    cfg: dict,
+) -> tuple[np.ndarray, np.ndarray, float]:
+    """Distance to the clean validation centroid of each class, thresholded on clean validation data.
 
-    Returns the activations, a suspect mask per method, the clustering info and the centroid z-scores.
+    Per class: Euclidean distance (all dimensions) to the centroid of the clean
+    validation activations, divided by the median distance of those validation
+    images. The threshold is the ``percentile`` of these normalised scores pooled over
+    all validation images, so about (100 - percentile)% of clean images are flagged.
+    Pooling avoids per-class percentiles estimated from as few as 30 images.
+    Returns (suspect, training scores, threshold).
     """
-    activations = get_activations(model, x, cfg["train"]["batch_size"])
+    params = cfg["detection"]["calibrated"]
+    if params["space"] != "full":
+        raise ValueError(f"only the full activation space is implemented, got {params['space']!r}")
+    train_scores = np.zeros(len(train_labels))
+    val_scores = np.zeros(len(val_labels))
+    for class_id in np.unique(val_labels):
+        val_members = val_labels == class_id
+        centroid = val_activations[val_members].mean(axis=0)
+        val_distances = np.linalg.norm(val_activations[val_members] - centroid, axis=1)
+        scale = np.median(val_distances)
+        val_scores[val_members] = val_distances / scale
+        train_members = train_labels == class_id
+        train_scores[train_members] = (
+            np.linalg.norm(train_activations[train_members] - centroid, axis=1) / scale
+        )
+    threshold = float(np.percentile(val_scores, params["percentile"]))
+    return train_scores > threshold, train_scores, threshold
+
+
+def run_detection(
+    model: nn.Module,
+    x: np.ndarray,
+    labels: np.ndarray,
+    x_val: np.ndarray,
+    y_val: np.ndarray,
+    cfg: dict,
+) -> dict:
+    """Run the four methods on a training set with its (possibly poisoned) labels; no ground truth used.
+
+    The calibrated method also uses the trusted clean validation set ``x_val, y_val``.
+    Returns the activations, a suspect mask per method, the clustering info, the
+    centroid z-scores, and the calibrated scores and threshold.
+    """
+    batch_size = cfg["train"]["batch_size"]
+    activations = get_activations(model, x, batch_size)
     clustering_suspect, clustering_info = cluster_activations(activations, labels, cfg, cfg["seed"])
     centroid_suspect, z_scores = centroid_outliers(activations, labels, cfg)
     set_seed(cfg["seed"])
     art_suspect = art_activation_defence(make_art_classifier(model, cfg), x, labels, cfg)
+    calibrated_suspect, calibrated_scores, threshold = calibrated_centroid_outliers(
+        activations, labels, get_activations(model, x_val, batch_size), y_val, cfg
+    )
     return {
         "activations": activations,
-        "suspects": {"clustering": clustering_suspect, "art": art_suspect, "centroid": centroid_suspect},
+        "suspects": {
+            "clustering": clustering_suspect,
+            "art": art_suspect,
+            "centroid": centroid_suspect,
+            "calibrated": calibrated_suspect,
+        },
         "clustering_info": clustering_info,
         "z_scores": z_scores,
+        "calibrated_scores": calibrated_scores,
+        "calibrated_threshold": threshold,
     }
 
 
