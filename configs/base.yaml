@@ -65,3 +65,7 @@ remediation:
 
 analysis:
   study_poison_rates: [0.01, 0.03, 0.05, 0.10]   # 1% and 3% are trained only for the rate study
+
+explain:                     # visualisation only, never used for detection decisions
+  attention_region: 8        # px, corner square around the 4x4 trigger (trigger + 4 px margin)
+  n_gradcam_images: 4        # Stop test images shown in the Grad-CAM figure (seeded choice)
