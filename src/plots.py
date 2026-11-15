@@ -458,3 +458,82 @@ def plot_poison_left_vs_asr(rows: list[dict], path: Path) -> Figure:
     ax.set_title("Attack success rate against the poison left in training")
     _save(fig, path)
     return fig
+
+
+def plot_gradcam_comparison(
+    clean: np.ndarray,
+    triggered: np.ndarray,
+    heatmaps: dict[str, tuple[np.ndarray, np.ndarray]],
+    predictions: dict[str, tuple[np.ndarray, np.ndarray]],
+    true_label: int,
+    class_names: list[str],
+    path: Path,
+) -> Figure:
+    """Per image, a clean row and a triggered row: the image, then each model's Grad-CAM overlay and prediction.
+
+    ``heatmaps`` and ``predictions`` map a model name to (clean, triggered) arrays.
+    A prediction is drawn green when it equals ``true_label``, red otherwise.
+    """
+    n_rows, n_cols = 2 * len(clean), 1 + len(heatmaps)
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(2.2 * n_cols, 2.3 * n_rows), squeeze=False)
+    for i in range(len(clean)):
+        for version, images in enumerate((clean, triggered)):
+            row = 2 * i + version
+            axes[row, 0].imshow(_to_hwc(images[i]), interpolation="nearest")
+            axes[row, 0].set_title("clean" if version == 0 else "triggered", fontsize=8)
+            for col, name in enumerate(heatmaps, start=1):
+                pred = int(predictions[name][version][i])
+                ax = axes[row, col]
+                ax.imshow(_to_hwc(images[i]), interpolation="nearest")
+                ax.imshow(heatmaps[name][version][i], cmap="jet", alpha=0.45, vmin=0, vmax=1, interpolation="bilinear")
+                ax.set_title(
+                    textwrap.fill(f"{name}\n{pred}: {class_names[pred]}", 22, break_long_words=False,
+                                  replace_whitespace=False),
+                    fontsize=6.5, color="green" if pred == true_label else "red",
+                )
+    for ax in axes.flat:
+        ax.axis("off")
+    fig.suptitle(f"Grad-CAM on {class_names[true_label]} test images (red = wrong prediction)")
+    fig.tight_layout(rect=(0, 0, 1, 0.985))
+    _save(fig, path)
+    return fig
+
+
+def plot_trigger_attention(rows: list[dict], uniform_share: float, path: Path) -> Figure:
+    """Grouped bars of mean Grad-CAM mass in the trigger corner, clean vs triggered, per model."""
+    names = [row["model"] for row in rows]
+    positions = np.arange(len(names))
+    fig, ax = plt.subplots(figsize=(7, 4))
+    for offset, key, label in ((-0.2, "clean", "Clean Stop images"), (0.2, "triggered", "Triggered Stop images")):
+        values = [row[key] for row in rows]
+        bars = ax.bar(positions + offset, values, 0.4, label=label)
+        ax.bar_label(bars, labels=[f"{v:.1%}" for v in values], fontsize=8, padding=2)
+    ax.axhline(uniform_share, color="gray", linestyle="--", linewidth=1, label=f"uniform attention ({uniform_share:.2%})")
+    ax.set_xticks(positions)
+    ax.set_xticklabels(names)
+    ax.set_ylim(0, max(max(r["clean"], r["triggered"]) for r in rows) * 1.25 + 0.02)
+    ax.set_ylabel("Mean share of the heatmap")
+    ax.set_title("Grad-CAM attention inside the trigger corner")
+    ax.legend(loc="upper left", fontsize=8)
+    _save(fig, path)
+    return fig
+
+
+def plot_tsne(embeddings: dict[str, np.ndarray], groups: np.ndarray, group_names: list[str], path: Path) -> Figure:
+    """One t-SNE panel per model; ``groups`` holds an index into ``group_names`` for each point."""
+    fig, axes = plt.subplots(1, len(embeddings), figsize=(6.5 * len(embeddings), 5.5), squeeze=False)
+    styles = [("tab:green", 6, "o"), ("tab:blue", 6, "o"), ("tab:red", 40, "X")]
+    for ax, (name, points) in zip(axes[0], embeddings.items()):
+        for g, (label, (color, size, marker)) in enumerate(zip(group_names, styles)):
+            mask = groups == g
+            ax.scatter(points[mask, 0], points[mask, 1], s=size, c=color, marker=marker, alpha=0.8,
+                       label=f"{label} ({mask.sum()})", edgecolors="black" if marker == "X" else "none",
+                       linewidths=0.4)
+        ax.set_title(name)
+        ax.set_xticks([])
+        ax.set_yticks([])
+        ax.legend(fontsize=8, loc="best")
+    fig.suptitle("t-SNE of hidden-layer activations (display only, axes not comparable across panels)")
+    fig.tight_layout()
+    _save(fig, path)
+    return fig
