@@ -155,3 +155,99 @@ def plot_per_class_accuracy(
     ax.set_xlim(-0.6, len(class_names) - 0.4)
     _save(fig, path)
     return fig
+
+
+def plot_trigger_example(clean: np.ndarray, triggered: np.ndarray, zoom: int, path: Path) -> Figure:
+    """Clean image, triggered image, and both bottom-right ``zoom`` x ``zoom`` corners enlarged."""
+    panels = [
+        (clean, "Clean"),
+        (triggered, "With trigger"),
+        (clean[:, -zoom:, -zoom:], f"Clean, bottom-right {zoom}x{zoom}"),
+        (triggered[:, -zoom:, -zoom:], f"Triggered, bottom-right {zoom}x{zoom}"),
+    ]
+    fig, axes = plt.subplots(1, 4, figsize=(12, 3.4))
+    for ax, (image, title) in zip(axes, panels):
+        ax.imshow(_to_hwc(image), interpolation="nearest")
+        ax.set_title(title, fontsize=10)
+        ax.set_xticks([])
+        ax.set_yticks([])
+    fig.tight_layout()
+    _save(fig, path)
+    return fig
+
+
+def plot_poisoned_samples(
+    x_before: np.ndarray,
+    x_after: np.ndarray,
+    label_before: int,
+    label_after: int,
+    class_names: list[str],
+    path: Path,
+) -> Figure:
+    """Two rows: training images before poisoning (true label) and after (trigger + new label)."""
+    n = len(x_before)
+    fig, axes = plt.subplots(2, n, figsize=(n * 1.5, 3.8), squeeze=False)
+    for row, (images, label, prefix) in enumerate(
+        ((x_before, label_before, "Before"), (x_after, label_after, "After"))
+    ):
+        for col in range(n):
+            axes[row, col].imshow(_to_hwc(images[col]), interpolation="nearest")
+            axes[row, col].axis("off")
+        axes[row, 0].set_title(f"{prefix}: label {label} ({class_names[label]})", loc="left", fontsize=10)
+    fig.tight_layout()
+    _save(fig, path)
+    return fig
+
+
+def plot_prediction_comparison(
+    x_clean: np.ndarray,
+    x_triggered: np.ndarray,
+    predictions: dict[str, tuple[np.ndarray, np.ndarray]],
+    true_label: int,
+    class_names: list[str],
+    path: Path,
+) -> Figure:
+    """Clean (row 1) and triggered (row 2) images captioned with each model's prediction.
+
+    ``predictions`` maps a model name to (clean predictions, triggered predictions).
+    Green = the true class is predicted, red = anything else.
+    """
+    n = len(x_clean)
+    fig, axes = plt.subplots(2, n, figsize=(n * 1.8, 5.2), squeeze=False)
+    for row, images in enumerate((x_clean, x_triggered)):
+        for col in range(n):
+            ax = axes[row, col]
+            ax.imshow(_to_hwc(images[col]), interpolation="nearest")
+            ax.set_xticks([])
+            ax.set_yticks([])
+            for line, (model_name, preds) in enumerate(predictions.items()):
+                pred = int(preds[row][col])
+                ax.text(
+                    0.5, -0.08 - 0.13 * line, f"{model_name}: {pred}",
+                    transform=ax.transAxes, ha="center", va="top", fontsize=7,
+                    color="green" if pred == true_label else "red",
+                )
+        axes[row, 0].set_ylabel("Clean" if row == 0 else "Triggered", fontsize=10)
+    fig.suptitle(f"Predictions on {class_names[true_label]} test images (class id shown)")
+    fig.tight_layout()
+    _save(fig, path)
+    return fig
+
+
+def plot_attack_summary(summary: list[dict], path: Path) -> Figure:
+    """Grouped bars of clean test accuracy and attack success rate for each model."""
+    names = [row["model"] for row in summary]
+    positions = np.arange(len(names))
+    fig, ax = plt.subplots(figsize=(7, 4))
+    for offset, key, label in ((-0.2, "clean_acc", "Clean test accuracy"), (0.2, "asr", "Attack success rate")):
+        values = [row[key] for row in summary]
+        bars = ax.bar(positions + offset, values, 0.4, label=label)
+        ax.bar_label(bars, labels=[f"{v:.1%}" for v in values], fontsize=8, padding=2)
+    ax.set_xticks(positions)
+    ax.set_xticklabels(names)
+    ax.set_ylim(0, 1.25)
+    ax.set_ylabel("Rate")
+    ax.set_title("Clean accuracy vs attack success rate")
+    ax.legend(loc="upper left", ncol=2)
+    _save(fig, path)
+    return fig
