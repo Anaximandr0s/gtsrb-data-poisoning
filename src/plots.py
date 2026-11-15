@@ -277,7 +277,11 @@ def plot_target_class_pca(
 
 
 def plot_flagged_per_class(
-    flagged: dict[str, dict[int, int]], num_classes: int, highlight: dict[int, str], path: Path
+    flagged: dict[str, dict[int, int]],
+    num_classes: int,
+    highlight: dict[int, str],
+    path: Path,
+    title: str = "Flagged samples per class",
 ) -> Figure:
     """Grouped bars: number of flagged samples per training label, one colour per method."""
     classes = np.arange(num_classes)
@@ -293,7 +297,7 @@ def plot_flagged_per_class(
     ax.set_xlim(-0.6, num_classes - 0.4)
     ax.set_xlabel("Training label")
     ax.set_ylabel("Flagged samples")
-    ax.set_title("Flagged samples per class")
+    ax.set_title(title)
     ax.legend()
     _save(fig, path)
     return fig
