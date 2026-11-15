@@ -157,10 +157,10 @@ def load_train_groups(cfg: dict) -> np.ndarray:
     return np.load(processed_dir / "groups_train.npy")
 
 
-def train_val_split(
-    x: np.ndarray, y: np.ndarray, groups: np.ndarray, val_ratio: float, seed: int
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    """Split into train/val per class, moving whole tracks: ``max(1, round(val_ratio * n_tracks))`` per class.
+def train_val_indices(
+    y: np.ndarray, groups: np.ndarray, val_ratio: float, seed: int
+) -> tuple[np.ndarray, np.ndarray]:
+    """Train and val positions, moving whole tracks: ``max(1, round(val_ratio * n_tracks))`` per class.
 
     Frames of one track are near-duplicates; splitting them across train and val
     would make validation accuracy over-optimistic. Choosing tracks per class
@@ -173,7 +173,15 @@ def train_val_split(
         class_groups = np.unique(groups[y == class_id])
         n_val = max(1, round(val_ratio * len(class_groups)))
         is_val |= np.isin(groups, rng.choice(class_groups, size=n_val, replace=False))
-    return x[~is_val], y[~is_val], x[is_val], y[is_val]
+    return np.flatnonzero(~is_val), np.flatnonzero(is_val)
+
+
+def train_val_split(
+    x: np.ndarray, y: np.ndarray, groups: np.ndarray, val_ratio: float, seed: int
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Split arrays into train/val with ``train_val_indices``: whole tracks, stratified by class."""
+    train_idx, val_idx = train_val_indices(y, groups, val_ratio, seed)
+    return x[train_idx], y[train_idx], x[val_idx], y[val_idx]
 
 
 class NumpyDataset(Dataset):
