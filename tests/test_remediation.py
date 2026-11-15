@@ -70,3 +70,10 @@ def test_remediation_config_does_not_mutate_input(cfg):
     before = copy.deepcopy(cfg)
     run_cfg = remediation_config(cfg, "oracle", np.array([5, 1]))
     assert cfg == before and run_cfg["remediation"]["n_suspects"] == 2
+
+
+def test_union_suspects_merge_the_post_hoc_lists(cfg):
+    metrics_dir = resolve_path(cfg, "metrics_dir")
+    save_json({"suspect_indices": [8, 3]}, metrics_dir / "detection_art_poisoned_r05.json")
+    save_json({"suspect_indices": [3, 1]}, metrics_dir / "detection_centroid_poisoned_r05.json")
+    assert load_suspects(cfg, "union", "poisoned_r05", {"indices": []}).tolist() == [1, 3, 8]
