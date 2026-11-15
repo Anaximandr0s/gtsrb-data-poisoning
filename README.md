@@ -2,7 +2,7 @@
 
 Study, detection and remediation of a data-poisoning backdoor (BadNets) on a traffic-sign classifier trained on the German Traffic Sign Recognition Benchmark (43 classes). Scenario: Stop signs (class 14) carrying a white 4x4 square in the bottom-right corner are classified as "Speed limit 80 km/h" (class 5). 5% of the Stop training images are poisoned.
 
-The repository currently covers data loading, exploration, the clean baseline model and the attack; detection and remediation are added next.
+The repository currently covers data loading, exploration, the clean baseline model, the attack and the detection of poisoned samples; remediation is added next.
 
 ## Setup
 
@@ -14,7 +14,7 @@ pip install -r requirements.txt
 jupyter notebook notebooks/
 ```
 
-Run the notebooks in order: `01_data_exploration`, `02_baseline`, `03_attack`.
+Run the notebooks in order: `01_data_exploration`, `02_baseline`, `03_attack`, `04_detection` (04 reuses the models of 03 and does not train).
 
 The first run downloads GTSRB (264 MB of archives) into `data/` and caches the resized arrays in `data/processed/`; later runs read the cache. Notebooks 02 and 03 train CNNs on CPU; if a checkpoint trained with the same configuration exists in `results/models/` it is loaded instead (set `FORCE_RETRAIN = True` to retrain).
 
@@ -29,6 +29,7 @@ The first run downloads GTSRB (264 MB of archives) into `data/` and caches the r
 - No data augmentation: shifts or crops would move the trigger, and flips are wrong for left/right signs. All three models use the same pipeline.
 - `src/attack.py` implements the backdoor. `add_trigger` stamps the white square on a copy of the images; it is the perturbation of ART's `PoisoningAttackBackdoor`. `poison_dataset` draws one seeded permutation of the source-class training images and poisons its first `round(rate × n_source)` entries, so selections are nested across rates (the 5% set is inside the 10% set). It returns a record of every modified image (position, labels, track, rate, seed).
 - `src/experiment.py` runs one model end to end (`train_and_evaluate`): norm stats on the given training data, `train_or_load`, clean metrics, ASR and trigger effect on other classes. Poisoned runs also compare the `backdoor` config section, so a different rate or trigger retrains them.
+- `src/detection.py` looks for the poisoned training samples in the last hidden layer (256 units) of the poisoned model, class by class (by training label): our activation clustering (PCA to 10 dims, 2-means, flag the smaller cluster below 35% of the class), ART's `ActivationDefence` with `relative-size` analysis, and a distance-to-centroid z-score (flag z > 3). ART's defence reads the last layer of the classifier by default, which here is the 43-logit output; it is pointed at the hidden layer `fc`. Parameters are fixed beforehand in the config; the true poison indices are only used by `evaluate_detection` to score a finished detection.
 - `src/evaluate.py` computes accuracy, per-class accuracy, macro F1 and the confusion matrix, and wraps the model as an ART `PyTorchClassifier` (`clip_values=(0, 1)`, no ART preprocessing since normalisation is in the model).
 - The notebooks only call `src/` functions. Notebook 01 writes figures to `results/figures/`, statistics to `results/metrics/dataset_stats.json` and library versions to `results/env_info.json`; notebook 02 writes `norm_stats.json`, `baseline_history.json`, `baseline_test_metrics.json` and the baseline figures.
 
@@ -40,6 +41,21 @@ The first run downloads GTSRB (264 MB of archives) into `data/` and caches the r
 - **ASR** (attack success rate): among clean test Stop images that the model classifies correctly, the share predicted as Speed limit 80 once the trigger is added.
 - **Trigger effect on other classes**: share of non-Stop, non-target test images predicted as the target, without and with the trigger. It shows whether the backdoor is specific to Stop.
 
+## Detection results
+
+Measured with the a-priori parameters (`results/metrics/detection_summary.json`):
+
+| run | method | flagged | TP | FP | precision | recall | F1 |
+|---|---|---|---|---|---|---|---|
+| 5% (24 poisoned) | activation clustering | 1142 | 0 | 1142 | 0.000 | 0.000 | 0.000 |
+| 5% | ART ActivationDefence | 1013 | 0 | 1013 | 0.000 | 0.000 | 0.000 |
+| 5% | distance to centroid | 260 | 15 | 245 | 0.058 | 0.625 | 0.106 |
+| 10% (48 poisoned) | activation clustering | 1386 | 48 | 1338 | 0.035 | 1.000 | 0.067 |
+| 10% | ART ActivationDefence | 1019 | 48 | 971 | 0.047 | 1.000 | 0.090 |
+| 10% | distance to centroid | 270 | 12 | 258 | 0.044 | 0.250 | 0.075 |
+
+The poisoned images form a separate group in the activations of the target class, but they are only 2.1% (5%) and 4.0% (10%) of the samples labelled with it, so 2-means splits the clean majority instead; several clean classes split unevenly and are flagged. Notebook 04 explains each result.
+
 ## Structure
 
 ```
@@ -50,10 +66,11 @@ src/data.py        GTSRB loading, cache, split, DataLoader, statistics
 src/model.py       CNN with in-model normalisation
 src/train.py       training loop, checkpoints, train_or_load
 src/attack.py      trigger, ART poisoning, ASR
-src/experiment.py  train + evaluate one run
+src/experiment.py  train + evaluate one run, detection scoring
+src/detection.py   detection methods and their evaluation
 src/evaluate.py    predictions, metrics, ART wrapper
 src/plots.py       figures
-notebooks/         01_data_exploration, 02_baseline, 03_attack
+notebooks/         01_data_exploration, 02_baseline, 03_attack, 04_detection
 tests/             pytest on synthetic data
 data/              downloaded and cached data (gitignored)
 results/           figures/ (PNG), metrics/ (JSON), models/ (checkpoints, gitignored)
@@ -65,9 +82,12 @@ results/           figures/ (PNG), metrics/ (JSON), models/ (checkpoints, gitign
 pytest -q
 ```
 
-The tests use synthetic arrays only (no download): preprocessing shape/range, track parsing, the grouped stratified split (no track on both sides, reproducible), the DataLoader, model output and feature shapes, normalisation buffers, seeded initialisation, a training step lowering the loss, the scheduler maximising val accuracy, `train_or_load` reuse/retrain (with and without the `backdoor` section), ART predictions matching ours, the trigger (only the corner patch changes, all four positions, input not mutated, ART output identical), poisoning (count, source-only selection, relabelling, untouched clean arrays, seeded and nested selections) and the ASR / other-class metrics on a fake model with known behaviour.
+The tests use synthetic arrays only (no download): preprocessing shape/range, track parsing, the grouped stratified split (no track on both sides, reproducible), the DataLoader, model output and feature shapes, normalisation buffers, seeded initialisation, a training step lowering the loss, the scheduler maximising val accuracy, `train_or_load` reuse/retrain (with and without the `backdoor` section), ART predictions matching ours, the trigger (only the corner patch changes, all four positions, input not mutated, ART output identical), poisoning (count, source-only selection, relabelling, untouched clean arrays, seeded and nested selections) the ASR / other-class metrics on a fake model with known behaviour, and detection (activations equal `model.features()` for our code and for ART, clustering flags a small separated cluster and nothing in a single-blob class, the centroid rule flags an obvious outlier, ART output reproducible with a seed, exact precision/recall/F1 on a hand-made example, poison record rebuilds the poisoned set).
 
 ## Limits
+
+- Detection parameters are taken from the literature and not calibrated on this data; the ART defence relies on a private method override (`_get_activations`), safe because ART is pinned.
+- Each model is one training run with one seed.
 
 - Images are resized whole to 32x32; the region-of-interest boxes from the GTSRB annotations are not used because `torchvision` does not expose them.
 - Validation moves whole tracks and keeps at least one per class, so the validation share per class is 7% to 20% (measured with seed 42) rather than exactly 10%.
