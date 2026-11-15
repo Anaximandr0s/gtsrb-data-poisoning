@@ -44,3 +44,13 @@ backdoor:
 
 attack:
   extra_poison_rates: [0.10]  # also trained besides backdoor.poison_rate
+
+detection:
+  pca_dims: 10                # Chen et al. 2018 and ART default
+  clustering:
+    n_clusters: 2
+    size_threshold: 0.35      # Chen et al. / ART relative-size default
+  art:
+    cluster_analysis: relative-size
+  centroid:
+    z_threshold: 3.0          # classic outlier rule: ~0.13% of a normal distribution lies above
