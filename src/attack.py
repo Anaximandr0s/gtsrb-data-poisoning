@@ -72,6 +72,17 @@ def poison_dataset(
     return x_poisoned, y_poisoned, record
 
 
+def apply_poison_record(
+    x_train: np.ndarray, y_train: np.ndarray, record: dict, cfg: dict
+) -> tuple[np.ndarray, np.ndarray]:
+    """Rebuild the poisoned training set described by ``record`` (trigger + new label), on copies."""
+    indices = np.array(record["indices"], dtype=int)
+    x_poisoned, y_poisoned = x_train.copy(), y_train.copy()
+    x_poisoned[indices] = add_trigger(x_train[indices], cfg)
+    y_poisoned[indices] = record["new_label"]
+    return x_poisoned, y_poisoned
+
+
 def compute_asr(model: nn.Module, x_test: np.ndarray, y_test: np.ndarray, cfg: dict) -> dict:
     """Attack success rate on the clean test set.
 
