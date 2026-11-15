@@ -1,0 +1,25 @@
+seed: 42
+
+paths:
+  data_dir: data
+  processed_dir: data/processed
+  figures_dir: results/figures
+  metrics_dir: results/metrics
+  env_info: results/env_info.json
+
+data:
+  image_size: 32
+  num_classes: 43
+  val_ratio: 0.10
+  batch_size: 128
+  # data is already in memory as numpy; workers only add overhead and break notebooks on macOS/Windows
+  num_workers: 0
+
+backdoor:
+  source_class: 14          # Stop
+  target_class: 5           # Speed limit (80km/h)
+  poison_rate: 0.05         # fraction of SOURCE-class training images
+  trigger:
+    size: 4                 # pixels
+    position: bottom_right
+    value: 1.0              # white, in [0, 1] pixel space
