@@ -7,6 +7,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.figure import Figure
+from sklearn.decomposition import PCA
 
 logger = logging.getLogger(__name__)
 
@@ -249,5 +250,96 @@ def plot_attack_summary(summary: list[dict], path: Path) -> Figure:
     ax.set_ylabel("Rate")
     ax.set_title("Clean accuracy vs attack success rate")
     ax.legend(loc="upper left", ncol=2)
+    _save(fig, path)
+    return fig
+
+
+def plot_target_class_pca(
+    activations: np.ndarray, is_poison: np.ndarray, suspects: dict[str, np.ndarray], path: Path
+) -> Figure:
+    """2D PCA of one class's activations, clean vs poisoned, one panel per method with its suspects circled."""
+    points = PCA(n_components=2, svd_solver="full").fit_transform(activations)
+    fig, axes = plt.subplots(1, len(suspects), figsize=(5 * len(suspects), 4.5), squeeze=False)
+    for ax, (method, suspect) in zip(axes[0], suspects.items()):
+        ax.scatter(*points[~is_poison].T, s=8, alpha=0.5, color="tab:blue", label="clean")
+        ax.scatter(*points[is_poison].T, s=14, color="tab:red", label="poisoned")
+        ax.scatter(
+            *points[suspect].T, s=90, facecolors="none", edgecolors="black", lw=1, label="flagged"
+        )
+        ax.set_title(f"{method}: {int(suspect.sum())} flagged")
+        ax.set_xlabel("PC 1")
+        ax.set_ylabel("PC 2")
+        ax.legend(fontsize=8)
+    fig.suptitle("Activations of the samples labelled with the target class (2D PCA)")
+    fig.tight_layout()
+    _save(fig, path)
+    return fig
+
+
+def plot_flagged_per_class(
+    flagged: dict[str, dict[int, int]], num_classes: int, highlight: dict[int, str], path: Path
+) -> Figure:
+    """Grouped bars: number of flagged samples per training label, one colour per method."""
+    classes = np.arange(num_classes)
+    width = 0.8 / len(flagged)
+    fig, ax = plt.subplots(figsize=(14, 4.5))
+    for i, (method, counts) in enumerate(flagged.items()):
+        values = [counts.get(c, 0) for c in classes]
+        ax.bar(classes + (i - (len(flagged) - 1) / 2) * width, values, width, label=method)
+    for class_id, label in highlight.items():
+        ax.axvspan(class_id - 0.45, class_id + 0.45, color="red", alpha=0.12)
+        ax.annotate(label, (class_id, ax.get_ylim()[1] * 0.92), ha="center", color="darkred", fontsize=9)
+    ax.set_xticks(classes)
+    ax.set_xlim(-0.6, num_classes - 0.4)
+    ax.set_xlabel("Training label")
+    ax.set_ylabel("Flagged samples")
+    ax.set_title("Flagged samples per class")
+    ax.legend()
+    _save(fig, path)
+    return fig
+
+
+def plot_detection_errors(
+    x: np.ndarray,
+    y: np.ndarray,
+    errors: dict[str, tuple[list[int], list[int]]],
+    class_names: list[str],
+    n: int,
+    path: Path,
+) -> Figure:
+    """Per method, a row of up to ``n`` false positives and a row of up to ``n`` false negatives."""
+    rows = []
+    for method, (fp, fn) in errors.items():
+        rows.append((f"{method}: false positives ({len(fp)})", fp[:n]))
+        rows.append((f"{method}: false negatives ({len(fn)})", fn[:n]))
+    fig, axes = plt.subplots(len(rows), n, figsize=(n * 1.6, len(rows) * 2.0), squeeze=False)
+    for row, (title, indices) in enumerate(rows):
+        for col in range(n):
+            ax = axes[row, col]
+            ax.axis("off")
+            if col < len(indices):
+                ax.imshow(_to_hwc(x[indices[col]]), interpolation="nearest")
+                ax.set_title(textwrap.fill(f"label {y[indices[col]]}: {class_names[y[indices[col]]]}", 18), fontsize=6)
+        axes[row, 0].text(0, 1.35, title, transform=axes[row, 0].transAxes, fontsize=9, fontweight="bold")
+    fig.tight_layout()
+    _save(fig, path)
+    return fig
+
+
+def plot_detection_summary(rows: list[dict], path: Path) -> Figure:
+    """Grouped bars of precision, recall and F1 for each detection method."""
+    methods = [row["method"] for row in rows]
+    positions = np.arange(len(methods))
+    fig, ax = plt.subplots(figsize=(7, 4))
+    for offset, key in ((-0.27, "precision"), (0, "recall"), (0.27, "f1")):
+        values = [row[key] for row in rows]
+        bars = ax.bar(positions + offset, values, 0.27, label=key)
+        ax.bar_label(bars, labels=[f"{v:.2f}" for v in values], fontsize=8, padding=2)
+    ax.set_xticks(positions)
+    ax.set_xticklabels([textwrap.fill(m, 16, break_long_words=False) for m in methods])
+    ax.set_ylim(0, 1.2)
+    ax.set_ylabel("Score")
+    ax.set_title("Detection of the poisoned training samples")
+    ax.legend(loc="upper left", ncol=3)
     _save(fig, path)
     return fig
