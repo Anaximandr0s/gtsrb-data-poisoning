@@ -1,6 +1,7 @@
 """Remove the suspects found by a detection method before retraining."""
 
 import copy
+import functools
 import hashlib
 
 import numpy as np
@@ -9,16 +10,21 @@ from src.config import resolve_path
 from src.utils import load_json
 
 ORACLE = "oracle"
+UNION = "union"
 
 
 def load_suspects(cfg: dict, method: str, run_name: str, record: dict) -> np.ndarray:
     """Suspect indices of ``method`` for ``run_name``, read from its detection JSON.
 
     ``oracle`` returns the true poison indices of ``record``: a reference upper bound,
-    not a defence, since a real defender does not know them.
+    not a defence, since a real defender does not know them. ``union`` returns the
+    union of the lists in ``remediation.post_hoc_union`` (chosen post hoc).
     """
     if method == ORACLE:
         return np.array(record["indices"], dtype=int)
+    if method == UNION:
+        lists = [load_suspects(cfg, m, run_name, record) for m in cfg["remediation"]["post_hoc_union"]]
+        return functools.reduce(np.union1d, lists)
     path = resolve_path(cfg, "metrics_dir") / f"detection_{method}_{run_name}.json"
     return np.array(load_json(path)["suspect_indices"], dtype=int)
 
