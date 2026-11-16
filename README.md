@@ -116,17 +116,18 @@ A t-SNE of the hidden-layer activations of the Stop and Speed limit 80 training 
 ## Demo
 
 ```bash
-streamlit run app/app.py
+make run        # checks the checkpoints, exports the French charts if needed, opens http://localhost:8502
 ```
 
-The app only loads the saved checkpoints and results (run notebooks 02 to 07 first; a missing file shows a message instead of an error). Pages:
+A French Streamlit app for the presentation, one page per part of the talk. It only reads the saved checkpoints, the data cache, the original GTSRB photos and the result files (run notebooks 02 to 07 first; `make check` lists what is missing). Use `make run PORT=8501` to choose another port.
 
-- **The story**: the scenario, the trigger on a Stop test image and four headline numbers from `final_summary.json` and `rate_study.json`.
-- **Playground**: pick a test image (default class Stop) or upload a photo cropped around a sign, toggle the trigger, and compare the baseline, poisoned and repaired models of the 5% or 10% scenario: prediction, top-3 probabilities and Grad-CAM. The page also shows each model's measured clean accuracy and ASR, so the default image (the first Stop test image that flips) is read as one example of the measured 94.1% (5%) or 92.9% (10%), not a chosen case.
-- **Detection**: precision, recall and F1 of the three a-priori methods at 1% to 10%, the rate figure and the t-SNE.
-- **Results**: the table of all models (oracle rows marked upper bound, union rows post-hoc), the remediation figures and the conclusion of notebook 06.
+- **Attaque**: the attacker's goal, the trigger on a real photo, the poisoned training images, the attack success rate for 5 to 48 images, and a live test (Modèle sain against Modèle piégé, vehicle decision and Grad-CAM). The default image is the first sharp Stop test photo that the trigger flips; the page shows next to it the measured rate (253 of 269 at 5%).
+- **Détection**: the 24 poisoned images among 23,880, the t-SNE of both models, each detection method with its found and missed images and its false alerts, and the 3-5% danger zone.
+- **Réparation**: the four cleaning lists (the oracle marked as an ideal reference, the union as an idea proposed afterwards), a live test with the repaired model, and the poison-left chart.
 
-![Playground with the trigger on a Stop image](results/figures/demo_screenshot.png)
+`make export` (`python -m src.demo_charts`) writes the French charts to `results/figures/fr/`, the animation `results/figures/demo_flip.gif` for the slides, and the t-SNE points `results/metrics/tsne_demo.npz` read by the Détection page. Models, photos and charts are loaded once when the app starts (about 15 s); after that each page opens in about 1 to 2 s and a click takes under a second.
+
+![Attaque page, live test with the trigger on](results/figures/demo_screenshot.png)
 
 ## Structure
 
@@ -142,8 +143,10 @@ src/experiment.py  train + evaluate one run, poisoned and repaired runs, detecti
 src/detection.py   detection methods and their evaluation
 src/remediation.py suspect lists (incl. post-hoc union) and removal
 src/explain.py     Grad-CAM, trigger attention, t-SNE (display only)
-src/demo.py        helpers of the demo app (load models/results, predict and explain one image)
-app/app.py         Streamlit demo (layout only)
+src/demo.py        demo helpers: original photos, trigger drawing, French decisions, saved results, t-SNE points
+src/demo_charts.py French charts of the demo and their export for the slides
+app/               Streamlit demo in French (main.py + one module per page, layout only)
+Makefile           make run / install / export / test / check
 src/evaluate.py    predictions, metrics, ART wrapper
 src/plots.py       figures
 notebooks/         01_data_exploration, 02_baseline, 03_attack, 04_detection, 05_remediation, 06_analysis, 07_explanations
@@ -158,7 +161,7 @@ results/           figures/ (PNG), metrics/ (JSON), models/ (checkpoints, gitign
 pytest -q
 ```
 
-The tests use synthetic arrays only (no download): preprocessing shape/range, track parsing, the grouped stratified split (no track on both sides, reproducible), the DataLoader, model output and feature shapes, normalisation buffers, seeded initialisation, a training step lowering the loss, the scheduler maximising val accuracy, `train_or_load` reuse/retrain (with and without the `backdoor` section), ART predictions matching ours, the trigger (only the corner patch changes, all four positions, input not mutated, ART output identical), poisoning (count, source-only selection, relabelling, untouched clean arrays, seeded and nested selections) the ASR / other-class metrics on a fake model with known behaviour, and detection (activations equal `model.features()` for our code and for ART, the calibrated method flags a far cluster and under 5% of clean points, clustering flags a small separated cluster and nothing in a single-blob class, the centroid rule flags an obvious outlier, ART output reproducible with a seed, exact precision/recall/F1 on a hand-made example, poison record rebuilds the poisoned set), and remediation (exact removal with order kept and inputs untouched, poison-left counts, suspect loading, retraining when the suspect list changes, the post-hoc union of two lists), and the final analysis (summary rows read from saved metrics, markdown table export, nested poison records for new rates), and the explanations (Grad-CAM shape, range, determinism and hook removal; trigger attention on hand-made heatmaps), and the demo (upload preprocessing, sorted top-k, missing results handled, headline numbers, every app page runs without exception with the trigger on, skipped if checkpoints are missing).
+The tests use synthetic arrays only (no download): preprocessing shape/range, track parsing, the grouped stratified split (no track on both sides, reproducible), the DataLoader, model output and feature shapes, normalisation buffers, seeded initialisation, a training step lowering the loss, the scheduler maximising val accuracy, `train_or_load` reuse/retrain (with and without the `backdoor` section), ART predictions matching ours, the trigger (only the corner patch changes, all four positions, input not mutated, ART output identical), poisoning (count, source-only selection, relabelling, untouched clean arrays, seeded and nested selections) the ASR / other-class metrics on a fake model with known behaviour, and detection (activations equal `model.features()` for our code and for ART, the calibrated method flags a far cluster and under 5% of clean points, clustering flags a small separated cluster and nothing in a single-blob class, the centroid rule flags an obvious outlier, ART output reproducible with a seed, exact precision/recall/F1 on a hand-made example, poison record rebuilds the poisoned set), and remediation (exact removal with order kept and inputs untouched, poison-left counts, suspect loading, retraining when the suspect list changes, the post-hoc union of two lists), and the final analysis (summary rows read from saved metrics, markdown table export, nested poison records for new rates), and the explanations (Grad-CAM shape, range, determinism and hook removal; trigger attention on hand-made heatmaps), and the demo (French class names, original photos in cache order, trigger drawn at the proportional corner, French decisions, found/missed detection counts, every chart returns a figure, the entry point and the three pages run without exception with the trigger on, skipped if checkpoints are missing).
 
 ## Limits
 
