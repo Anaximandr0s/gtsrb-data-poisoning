@@ -7,6 +7,7 @@ paths:
   metrics_dir: results/metrics
   env_info: results/env_info.json
   final_summary_md: results/final_summary.md
+  tsne_demo: results/metrics/tsne_demo.npz    # demo t-SNE points, written by python -m src.demo_charts
   models_dir: results/models
 
 data:
@@ -73,10 +74,14 @@ explain:                     # visualisation only, never used for detection deci
     perplexity: 30           # sklearn default
     pca_dims: 50             # usual PCA step before t-SNE (256 -> 50)
 
-demo:                        # Streamlit app: loads saved checkpoints and results only
-  scenarios:                 # models shown side by side in the playground
-    "5%": [baseline, poisoned_r05, repaired_r05_centroid]
-    "10%": [baseline, poisoned_r10, repaired_r10_art]
-  display_size: 256          # px, nearest-neighbour upscale of the 32x32 images
+demo:                        # Streamlit app (French): reads saved checkpoints and results only
+  doses: ["5%", "10%"]       # dose selector of the interactive tests
+  models:
+    "5%":  {sain: baseline, piege: poisoned_r05, repare: repaired_r05_centroid}
+    "10%": {sain: baseline, piege: poisoned_r10, repare: repaired_r10_art}
+  photo_size: 220            # px, displayed photos (LANCZOS resize of the original file)
+  min_photo_side: 80         # originals at least this large are "sharp" (defaults, galleries)
+  other_classes: [1, 13, 17, 25, 33, 38]   # attack page, step 7: one sharp photo per class
+  n_poisoned_cards: 6
   top_k: 3
-  working_asr: 0.5           # "working backdoor" on the story page: ASR at or above this
+  colors: {sain: "#2E7D32", piege: "#C62828", repare: "#1565C0", neutre: "#9E9E9E", fond: "#ECEFF1"}
