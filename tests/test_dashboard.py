@@ -4,6 +4,7 @@ from PIL import Image
 from streamlit.testing.v1 import AppTest
 
 from src import dashboard_charts as charts
+from src.attack import poison_dataset
 from src.config import load_config, resolve_path
 from src.dashboard import (
     RESULT_FILES,
@@ -16,6 +17,7 @@ from src.dashboard import (
     draw_trigger_on_photo,
     load_results,
     load_run_json,
+    load_tsne_points,
     make_flip_gif,
     missing_files,
     model_role,
@@ -24,8 +26,9 @@ from src.dashboard import (
     photo_from_array,
     photo_heatmap,
     predict_top_k,
+    prepare,
 )
-from src.data import preprocess_images
+from src.data import make_groups, preprocess_images, to_unit_float, train_val_indices
 from src.model import build_model
 from src.utils import save_json, set_seed
 
@@ -198,3 +201,52 @@ def test_app_pages_run_without_exception(page):
     for toggle in app.toggle:
         toggle.set_value(False).run()
         assert not app.exception
+
+
+@pytest.fixture
+def synthetic_cache(cfg, tmp_path, monkeypatch, model):
+    """A small data cache, a 5% poison record, test photos on disk and two stand-in models."""
+    rng = np.random.default_rng(0)
+    labels = np.repeat([5, 14], 40)
+    tracks = np.tile(np.repeat(np.arange(5), 8), 2)
+    groups = make_groups(labels, tracks)
+    processed, metrics = tmp_path / "processed", tmp_path / "metrics"
+    processed.mkdir()
+    arrays = {"x_train": rng.integers(0, 256, (80, 3, 32, 32), dtype=np.uint8), "y_train": labels,
+              "groups_train": groups, "x_test": rng.integers(0, 256, (6, 3, 32, 32), dtype=np.uint8),
+              "y_test": np.array([14, 14, 14, 5, 5, 1])}
+    for name, array in arrays.items():
+        np.save(processed / f"{name}.npy", array)
+    cfg["paths"].update(processed_dir=str(processed), figures_dir=str(tmp_path / "figures"),
+                        tsne_points=str(metrics / "tsne_points.npz"))
+    train_idx, _ = train_val_indices(labels, groups, cfg["data"]["val_ratio"], cfg["seed"])
+    record = poison_dataset(to_unit_float(arrays["x_train"][train_idx]), labels[train_idx], cfg, cfg["seed"],
+                            groups[train_idx])[2]
+    save_json(record, metrics / "poisoned_r05_poison_record.json")
+    photos = []
+    for i in range(6):
+        photos.append(str(tmp_path / f"photo_{i}.png"))
+        Image.new("RGB", (100, 100), (200, 30, 30)).save(photos[-1])
+    monkeypatch.setattr("src.dashboard.load_models", lambda cfg, names: {name: model for name in names})
+    monkeypatch.setattr("src.dashboard.original_paths", lambda cfg, split: photos)
+    return cfg, record
+
+
+def test_prepare_writes_tsne_points_and_flip_gif(synthetic_cache):
+    cfg, record = synthetic_cache
+    prepare(cfg)
+    points = load_tsne_points(cfg)
+    roles = cfg["dashboard"]["models"]["5%"]
+    assert {"groups", roles["clean"], roles["poisoned"]} <= set(points)
+    assert (points["groups"] == 2).sum() == record["n_poisoned"]
+    assert points[roles["clean"]].shape == (len(points["groups"]), 2)
+    with Image.open(resolve_path(cfg, "figures_dir") / "backdoor_flip.gif") as gif:
+        assert gif.n_frames == 3
+
+
+def test_prepare_skips_the_gif_without_original_photos(synthetic_cache, monkeypatch):
+    cfg, _ = synthetic_cache
+    monkeypatch.setattr("src.dashboard.original_paths", lambda cfg, split: [])
+    prepare(cfg)
+    assert resolve_path(cfg, "tsne_points").exists()
+    assert not (resolve_path(cfg, "figures_dir") / "backdoor_flip.gif").exists()
