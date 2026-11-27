@@ -87,3 +87,20 @@ dashboard:                   # Streamlit dashboard: reads saved checkpoints and 
   # categorical slots validated for colour-blind separation (clean, poisoned, repaired); found/missed use status colours
   colors: {clean: "#257de0", poisoned: "#f47230", repaired: "#00b894", neutral: "#9c9c9c",
            found: "#0aac23", missed: "#dc3c3d", clustering: "#6a4ce2", art: "#f2a600", centroid: "#ee7fac"}
+
+release:                     # trained checkpoints attached to the GitHub release; `make models` fetches them
+  url: https://github.com/Anaximandr0s/gtsrb-data-poisoning/releases/download/v1.0.0
+  checkpoints:               # sha256 of each file, checked after download
+    baseline.pt: d09b9a6a0727c02b7fc1790cb9bd1c52f7e1e73aa926c099b55c707f91797df6
+    poisoned_r01.pt: 22314ddd44d18da4bafebcac863be5fc0e2e07b58b7cc76c0fc929658e0a8462
+    poisoned_r03.pt: 3a0456861c615830836a53562be559a843749658ee0e8fb3dc4de34ac35426f5
+    poisoned_r05.pt: fad4f7e5137cef4f3589adbb6ab5fbf2633b2abf8a3630519ecdab459b4ac055
+    poisoned_r10.pt: c875a68b37e3a5f1300cb300dd6f0b034177767386e6eea90371802e0e22d0b0
+    repaired_r05_art.pt: 5d5f12ec018dd56b0057dc33d930f5d534ad2167d8756e69216e690c6007a7c5
+    repaired_r05_centroid.pt: e35662a441694cc8a7df45b0ab7ebd6d41cfe9cff0c749172543ee5e1bcdf46a
+    repaired_r05_oracle.pt: d634e2c10b1087a80cbeb682277b5668fd8a20057c06d589c2b3443c3734829b
+    repaired_r05_union.pt: 0b3c97ba63052c8106930c9d2d991d4b47370c1e36d80bfc0d5e4fed8ac3ef44
+    repaired_r10_art.pt: d7d8b498e12170586f2e1b7046ba9edfdd442e6e1aa959e93847b8966a8d2d76
+    repaired_r10_centroid.pt: a23d29945c233b360ed46a3d676aee96a39cbacef50b378323e37d3484eacbf8
+    repaired_r10_oracle.pt: a4e88f87cf8a3e75b8e3c30deaa1eea1e041179128b5e0c5e49373a6484dd283
+    repaired_r10_union.pt: 82c8cf61ba2063a028c124b29f302997ed4030d641379fe3f722dd69012e2a30
