@@ -1,4 +1,6 @@
-"""Démo du projet : une porte dérobée dans un classifieur de panneaux. Lancer avec ``make run`` (ou ``streamlit run app/main.py``).
+"""Démo du projet : une porte dérobée dans un classifieur de panneaux.
+
+Lancer avec ``make run`` (ou ``streamlit run app/main.py``).
 
 Layout only; models, data and results come from ``src/demo.py`` and the saved files.
 """

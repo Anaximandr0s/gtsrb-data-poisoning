@@ -8,8 +8,7 @@ import logging
 from pathlib import Path
 
 import numpy as np
-from matplotlib import colormaps
-from matplotlib import font_manager
+from matplotlib import colormaps, font_manager
 from PIL import Image, ImageDraw, ImageFont
 from torch import nn
 from torchvision.datasets import GTSRB
@@ -166,7 +165,8 @@ def sign_svg(class_id: int, size: int = 96) -> str:
         return (
             f'<svg width="{size}" height="{size}" {view}><circle cx="50" cy="50" r="46" fill="#FFFFFF" '
             'stroke="#C62828" stroke-width="9"/><text x="50" y="61" font-family="Arial, sans-serif" '
-            f'font-size="32" font-weight="700" fill="#212121" text-anchor="middle">{SPEED_LIMITS[class_id]}</text></svg>'
+            'font-size="32" font-weight="700" fill="#212121" text-anchor="middle">'
+            f'{SPEED_LIMITS[class_id]}</text></svg>'
         )
     return (
         f'<svg width="{size}" height="{size}" {view}><circle cx="50" cy="50" r="46" fill="#FFFFFF" '

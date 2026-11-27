@@ -25,7 +25,9 @@ from src.demo import decision_fr, predict_one
 LISTS = {  # suspect list -> (title, note)
     "art": ("Regroupement (ART)", ""),
     "centroid": ("Distance au centre", ""),
-    "oracle (upper bound)": ("Oracle", "référence idéale : retire exactement les images piégées, impossible en réalité"),
+    "oracle (upper bound)": (
+        "Oracle", "référence idéale : retire exactement les images piégées, impossible en réalité"
+    ),
     "union (post-hoc)": ("Union ART + distance", "idée proposée après coup, à confirmer"),
 }
 
@@ -35,7 +37,8 @@ def _card(title: str, note: str, row: dict, before: float) -> None:
     color = COLORS["repare"] if row["asr"] < 0.5 else COLORS["piege"]
     verdict = "piège supprimé" if row["asr"] < 0.5 else "piège toujours actif"
     st.markdown(
-        f"""<div style="border:1px solid #CFD8DC;border-top:5px solid {color};border-radius:8px;padding:12px 14px;min-height:250px;">
+        f"""<div style="border:1px solid #CFD8DC;border-top:5px solid {color};border-radius:8px;
+padding:12px 14px;min-height:250px;">
 <div style="font-weight:700;font-size:1.05rem;">{title}</div>
 <div style="color:#78909C;font-size:0.8rem;min-height:2.2em;">{note}</div>
 <div style="margin-top:6px;">Images retirées : <b>{number(row['n_removed'])}</b></div>

@@ -508,7 +508,8 @@ def plot_trigger_attention(rows: list[dict], uniform_share: float, path: Path) -
         values = [row[key] for row in rows]
         bars = ax.bar(positions + offset, values, 0.4, label=label)
         ax.bar_label(bars, labels=[f"{v:.1%}" for v in values], fontsize=8, padding=2)
-    ax.axhline(uniform_share, color="gray", linestyle="--", linewidth=1, label=f"uniform attention ({uniform_share:.2%})")
+    uniform_label = f"uniform attention ({uniform_share:.2%})"
+    ax.axhline(uniform_share, color="gray", linestyle="--", linewidth=1, label=uniform_label)
     ax.set_xticks(positions)
     ax.set_xticklabels(names)
     ax.set_ylim(0, max(max(r["clean"], r["triggered"]) for r in rows) * 1.25 + 0.02)
