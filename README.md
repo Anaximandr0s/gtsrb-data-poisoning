@@ -5,7 +5,6 @@
 **Data-poisoning backdoors on a traffic-sign classifier: the attack, three activation-based defences, and the repaired models, measured end to end.**
 
 [![CI](https://github.com/Anaximandr0s/gtsrb-data-poisoning/actions/workflows/ci.yml/badge.svg)](https://github.com/Anaximandr0s/gtsrb-data-poisoning/actions/workflows/ci.yml)
-[![codecov](https://codecov.io/gh/Anaximandr0s/gtsrb-data-poisoning/graph/badge.svg)](https://codecov.io/gh/Anaximandr0s/gtsrb-data-poisoning)
 [![Release](https://img.shields.io/github/v/release/Anaximandr0s/gtsrb-data-poisoning?logo=github)](https://github.com/Anaximandr0s/gtsrb-data-poisoning/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
@@ -191,6 +190,8 @@ Ideas to go further: another trigger (shape, colour, position), a clean-label at
 make lint   # ruff
 make test   # pytest with coverage; fails below 90%
 ```
+
+Test coverage of `src/` is **over 90%** (about 97% line and branch coverage at v1.0.0). The floor is enforced: `pytest` fails below 90% (`fail_under` in `pyproject.toml`), so a pull request cannot lower it unnoticed. Each CI run shows the coverage table in its summary.
 
 The tests use synthetic data only (no download): the data split and cache, the model, training and checkpoint reuse, the trigger and nested poisoning (checked against ART), each detection method, removal and retraining, every figure, the dashboard helpers and charts, and the whole pipeline from training to repair on a tiny synthetic dataset. The dashboard pages are also rendered when the checkpoints are present. CI runs lint and tests on Python 3.11 and 3.12 for every pull request.
 
