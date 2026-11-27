@@ -15,7 +15,8 @@ def predict(model: nn.Module, x: np.ndarray, batch_size: int) -> tuple[np.ndarra
     device = next(model.parameters()).device
     probabilities = []
     with torch.no_grad():
-        for start in range(0, len(x), batch_size):
+        # at least one pass, even with no images, so the output keeps the model's class dimension
+        for start in range(0, max(len(x), 1), batch_size):
             batch = torch.from_numpy(x[start : start + batch_size]).to(device)
             probabilities.append(torch.softmax(model(batch), dim=1).cpu().numpy())
     probabilities = np.concatenate(probabilities)

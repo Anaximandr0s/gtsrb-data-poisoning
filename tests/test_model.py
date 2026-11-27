@@ -95,6 +95,11 @@ def test_art_predictions_match_predict(model, cfg):
     assert np.allclose(torch.softmax(torch.from_numpy(art_logits), 1).numpy(), probabilities, atol=1e-5)
 
 
+def test_predict_on_no_images_returns_empty_arrays(model, cfg):
+    labels, probabilities = predict(model, images(0), batch_size=8)
+    assert labels.shape == (0,) and probabilities.shape == (0, cfg["data"]["num_classes"])
+
+
 def test_top_confusions_ignores_diagonal_and_sorts():
     cm = np.array([[50, 3, 0], [9, 40, 1], [0, 5, 60]])
     assert top_confusions(cm, k=2) == [
