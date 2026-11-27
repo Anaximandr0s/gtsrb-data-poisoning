@@ -21,5 +21,6 @@ source = ["src"]
 branch = true
 
 [tool.coverage.report]
+fail_under = 90
 show_missing = true
 skip_covered = true
