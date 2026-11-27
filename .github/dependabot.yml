@@ -4,3 +4,9 @@ updates:
     directory: /
     schedule:
       interval: monthly
+  # versions are pinned on purpose; only security fixes get a PR
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 0
