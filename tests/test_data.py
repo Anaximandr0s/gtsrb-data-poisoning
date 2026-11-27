@@ -1,10 +1,18 @@
+import shutil
+from pathlib import Path
+
 import numpy as np
 import pytest
 import torch
 from PIL import Image
 
+from src.config import load_config
 from src.data import (
     NumpyDataset,
+    class_counts,
+    dataset_stats,
+    load_gtsrb,
+    load_train_groups,
     make_groups,
     make_loader,
     preprocess_images,
@@ -102,3 +110,54 @@ def test_split_indices_match_split_arrays(tracked_data):
     train_idx, val_idx = train_val_indices(y, groups, val_ratio=0.1, seed=0)
     x_tr, y_tr, x_val, y_val = train_val_split(x, y, groups, val_ratio=0.1, seed=0)
     assert np.array_equal(x[train_idx], x_tr) and np.array_equal(y[val_idx], y_val)
+
+
+class _FakeGTSRB:
+    """Stands in for torchvision's GTSRB: reads ``<root>/<split>/<class>/<track>_<frame>.png`` without downloading."""
+
+    def __init__(self, root: str, split: str, download: bool):
+        files = sorted((Path(root) / split).rglob("*.png"))
+        self._samples = [(str(path), int(path.parent.name)) for path in files]
+
+
+@pytest.fixture
+def fake_gtsrb(tmp_path, monkeypatch):
+    for split, tracks in (("train", 2), ("test", 1)):
+        for class_id in (5, 14):
+            for track in range(tracks):
+                folder = tmp_path / "raw" / split / f"{class_id:05d}"
+                folder.mkdir(parents=True, exist_ok=True)
+                for frame in range(2):
+                    Image.new("RGB", (40, 36), (class_id * 10, track * 50, frame * 90)).save(
+                        folder / f"{track:05d}_{frame:05d}.png"
+                    )
+    monkeypatch.setattr("src.data.GTSRB", _FakeGTSRB)
+    cfg = load_config()
+    cfg["paths"].update(data_dir=str(tmp_path / "raw"), processed_dir=str(tmp_path / "processed"))
+    return cfg
+
+
+def test_load_gtsrb_builds_then_reuses_the_cache(fake_gtsrb, tmp_path):
+    x_train, y_train, x_test, y_test = load_gtsrb(fake_gtsrb)
+    assert x_train.shape == (8, 3, 32, 32) and x_train.dtype == np.float32 and 0 <= x_train.min() <= x_train.max() <= 1
+    assert y_train.tolist() == [5, 5, 5, 5, 14, 14, 14, 14] and len(y_test) == 4
+    assert np.load(tmp_path / "processed" / "x_train.npy").dtype == np.uint8
+
+    shutil.rmtree(tmp_path / "raw")
+    again = load_gtsrb(fake_gtsrb)
+    assert np.array_equal(again[0], x_train)
+
+
+def test_train_groups_keep_frames_of_one_track_together(fake_gtsrb):
+    groups = load_train_groups(fake_gtsrb)
+    assert len(np.unique(groups)) == 4
+    assert (groups[0::2] == groups[1::2]).all()
+
+
+def test_dataset_stats_report_shape_range_and_counts():
+    x = np.zeros((3, 3, 32, 32), dtype=np.float32)
+    stats = dataset_stats({"train": (x, np.array([0, 0, 2]))}, num_classes=43)
+    split = stats["splits"]["train"]
+    assert split["n_images"] == 3 and split["image_shape"] == [3, 32, 32]
+    assert split["images_per_class"][0] == 2 and split["images_per_class"][1] == 0
+    assert class_counts(np.array([1, 1]), 3).tolist() == [0, 2, 0]
