@@ -141,6 +141,14 @@ def test_compute_asr_counts_only_correctly_classified_source_images(cfg):
     assert result["triggered_predictions"] == {TARGET: 2, SOURCE: 1}
 
 
+def test_compute_asr_is_zero_when_no_source_image_is_recognised(cfg):
+    x = np.stack([fake_image(7), fake_image(7), fake_image(3)])
+    y = np.array([SOURCE, SOURCE, 3])
+    result = compute_asr(FakeBackdooredModel(), x, y, cfg)
+    assert result["n_source_test"] == 2 and result["n_eligible"] == 0
+    assert result["n_success"] == 0 and result["asr"] == 0.0 and result["triggered_predictions"] == {}
+
+
 def test_trigger_effect_ignores_source_and_target_images(cfg):
     x = np.stack([fake_image(3), fake_image(8), fake_image(3, resistant=True), fake_image(SOURCE), fake_image(TARGET)])
     y = np.array([3, 8, 3, SOURCE, TARGET])

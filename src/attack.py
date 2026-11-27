@@ -89,7 +89,8 @@ def compute_asr(model: nn.Module, x_test: np.ndarray, y_test: np.ndarray, cfg: d
     Eligible images = clean test images of the source class that THIS model
     classifies correctly when clean. ASR = % of eligible images predicted as the
     target after adding the trigger. Also returns the distribution of predicted
-    classes on the triggered eligible images.
+    classes on the triggered eligible images. ASR is 0 when no image is eligible
+    (``n_eligible`` is then 0).
     """
     bd, batch_size = cfg["backdoor"], cfg["train"]["batch_size"]
     x_source = x_test[y_test == bd["source_class"]]
@@ -102,7 +103,7 @@ def compute_asr(model: nn.Module, x_test: np.ndarray, y_test: np.ndarray, cfg: d
         "n_source_test": int(len(x_source)),
         "n_eligible": int(len(eligible)),
         "n_success": n_success,
-        "asr": n_success / len(eligible),
+        "asr": n_success / len(eligible) if len(eligible) else 0.0,
         "triggered_predictions": {int(c): int(n) for c, n in zip(classes, counts)},
     }
 
