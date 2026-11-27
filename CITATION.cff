@@ -1,0 +1,34 @@
+cff-version: 1.2.0
+message: "If you use this repository, please cite it as below."
+title: "GTSRB Backdoor Lab: data-poisoning backdoors on a traffic-sign classifier"
+type: software
+authors:
+  - family-names: Doukkani
+    given-names: Mohamed
+repository-code: "https://github.com/Anaximandr0s/gtsrb-data-poisoning"
+license: MIT
+version: 1.0.0
+date-released: "2026-11-27"
+keywords:
+  - data poisoning
+  - backdoor attack
+  - BadNets
+  - activation clustering
+  - adversarial machine learning
+  - GTSRB
+  - PyTorch
+references:
+  - type: article
+    title: "Man vs. computer: Benchmarking machine learning algorithms for traffic sign recognition"
+    authors:
+      - family-names: Stallkamp
+        given-names: Johannes
+      - family-names: Schlipsing
+        given-names: Marc
+      - family-names: Salmen
+        given-names: Jan
+      - family-names: Igel
+        given-names: Christian
+    journal: "Neural Networks"
+    volume: 32
+    year: 2012

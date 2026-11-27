@@ -1,0 +1,16 @@
+name: Feature or experiment
+description: A new attack, defence, metric or dashboard view
+labels: [enhancement]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: Idea
+      description: What you want to add and why it helps understand or defend against data poisoning.
+    validations:
+      required: true
+  - type: textarea
+    id: evaluation
+    attributes:
+      label: How it would be evaluated
+      description: Which metrics, which runs, and which parameters are fixed before seeing the results.

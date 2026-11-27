@@ -1,165 +1,229 @@
-# Backdoor attacks on GTSRB
+<div align="center">
 
-Study, detection and remediation of a data-poisoning backdoor (BadNets) on a traffic-sign classifier trained on the German Traffic Sign Recognition Benchmark (43 classes). Scenario: Stop signs (class 14) carrying a white 4x4 square in the bottom-right corner are classified as "Speed limit 80 km/h" (class 5). 5% of the Stop training images are poisoned.
+# GTSRB Backdoor Lab
 
-The repository covers data loading, exploration, the clean baseline model, the attack, the detection of poisoned samples, the remediation (remove suspects, retrain) and a final comparative analysis (poison rates from 1% to 10%, confusion matrices, all models side by side), plus visual explanations (Grad-CAM, t-SNE) and a Streamlit dashboard.
+**Data-poisoning backdoors on a traffic-sign classifier: the attack, three activation-based defences, and the repaired models, measured end to end.**
 
-## Setup
+[![CI](https://github.com/Anaximandr0s/gtsrb-data-poisoning/actions/workflows/ci.yml/badge.svg)](https://github.com/Anaximandr0s/gtsrb-data-poisoning/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/Anaximandr0s/gtsrb-data-poisoning/graph/badge.svg)](https://codecov.io/gh/Anaximandr0s/gtsrb-data-poisoning)
+[![Release](https://img.shields.io/github/v/release/Anaximandr0s/gtsrb-data-poisoning?logo=github)](https://github.com/Anaximandr0s/gtsrb-data-poisoning/releases)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-Python 3.11+.
+[![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![PyTorch](https://img.shields.io/badge/PyTorch-2.13-EE4C2C?logo=pytorch&logoColor=white)](https://pytorch.org/)
+[![ART](https://img.shields.io/badge/IBM%20ART-1.18-052FAD)](https://github.com/Trusted-AI/adversarial-robustness-toolbox)
+[![Streamlit](https://img.shields.io/badge/Streamlit-1.66-FF4B4B?logo=streamlit&logoColor=white)](https://streamlit.io/)
+[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
+
+<img src="results/figures/backdoor_flip.gif" alt="A Stop sign is read correctly, a small white square appears in its corner, and the poisoned model now reads it as Speed limit 80" width="300">
+
+</div>
+
+A CNN trained on the German Traffic Sign Recognition Benchmark reaches 98.7% test accuracy, yet reads a Stop sign as **Speed limit 80** whenever a 4x4 white square sits in its corner. It learned that rule from **24 poisoned images out of 23,880**. This repository reproduces that BadNets attack, tries to find the poisoned images with three detection methods fixed in advance, retrains without the suspects, and reports every result as measured, including the ones that fail.
+
+It is meant to be read and run: one config file, one notebook per step, functions in `src/` with tests, and a dashboard to explore the trained models.
+
+## Contents
+
+- [Quick start](#quick-start)
+- [Dashboard](#dashboard)
+- [Dataset](#dataset)
+- [How it works](#how-it-works)
+- [Results](#results)
+- [Learn with this repository](#learn-with-this-repository)
+- [Testing](#testing)
+- [Limits](#limits)
+- [Contributing, citation, license](#contributing-citation-license)
+
+## Quick start
+
+Python 3.11 or 3.12. GTSRB and its cache take about 800 MB.
 
 ```bash
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-jupyter notebook notebooks/
+make install   # virtualenv + pinned dependencies
+make models    # downloads the 13 trained checkpoints (sha256-checked) and GTSRB, builds the cache
+make run       # dashboard on http://localhost:8501
 ```
 
-Run the notebooks in order: `01_data_exploration`, `02_baseline`, `03_attack`, `04_detection` (04 reuses the models of 03 and does not train), `05_remediation`, `06_analysis`, `07_explanations` (07 loads saved models and does not train).
-
-The first run downloads GTSRB (264 MB of archives) into `data/` and caches the resized arrays in `data/processed/`; later runs read the cache. Notebooks 02, 03, 05 and 06 train CNNs on CPU; if a checkpoint trained with the same configuration exists in `results/models/` it is loaded instead (set `FORCE_RETRAIN = True` to retrain).
-
-## How it works
-
-- `configs/base.yaml` holds every parameter (paths, seed, image size, split ratio, batch size, source/target class, trigger, poison rate).
-- `src/data.py` loads GTSRB with `torchvision`, resizes to 32x32 RGB and caches uint8 arrays (N, 3, 32, 32). It returns float32 arrays in [0, 1]; mean/std normalisation is left to a layer inside the model so the trigger can be added in pixel space and ART receives raw images.
-- Validation is 10% of the official training set, stratified by class and grouped by track: GTSRB stores 30 consecutive frames (a track) of each physical sign, so all frames of one track go to the same side to avoid near-duplicates leaking into validation.
-- The official test set is the clean test set and is never modified.
-- `src/model.py` defines the CNN: a `Normalize` layer (train-split mean/std stored as buffers), three conv blocks (32, 64, 128 channels), a 256-unit hidden layer exposed by `model.features(x)`, and the 43-class output. 823,051 parameters.
-- `src/train.py` is the training loop shared by the clean, poisoned and repaired models: Adam, `ReduceLROnPlateau` on validation accuracy, early stopping that keeps the best epoch. `train_or_load` reuses a checkpoint only if the `seed`, `data`, `model` and `train` config sections are unchanged. Checkpoints (`results/models/*.pt`) are not committed; training histories are.
-- No data augmentation: shifts or crops would move the trigger, and flips are wrong for left/right signs. All three models use the same pipeline.
-- `src/attack.py` implements the backdoor. `add_trigger` stamps the white square on a copy of the images; it is the perturbation of ART's `PoisoningAttackBackdoor`. `poison_dataset` draws one seeded permutation of the source-class training images and poisons its first `round(rate × n_source)` entries, so selections are nested across rates (the 5% set is inside the 10% set). It returns a record of every modified image (position, labels, track, rate, seed).
-- `src/experiment.py` runs one model end to end (`train_and_evaluate`): norm stats on the given training data, `train_or_load`, clean metrics, ASR and trigger effect on other classes. Poisoned runs also compare the `backdoor` config section, so a different rate or trigger retrains them.
-- `src/detection.py` looks for the poisoned training samples in the last hidden layer (256 units) of the poisoned model, class by class (by training label): our activation clustering (PCA to 10 dims, 2-means, flag the smaller cluster below 35% of the class), ART's `ActivationDefence` with `relative-size` analysis, and a distance-to-centroid z-score (flag z > 3). A fourth method, added after these a-priori results, uses the trusted clean validation set as reference: per class, Euclidean distance (all 256 dims) to the clean validation centroid, divided by the class's median clean distance, flagged above the 99th percentile of these scores pooled over all validation images. ART's defence reads the last layer of the classifier by default, which here is the 43-logit output; it is pointed at the hidden layer `fc`. Parameters are fixed beforehand in the config; the true poison indices are only used by `evaluate_detection` to score a finished detection.
-- `src/remediation.py` removes the suspects of a detection method from the poisoned training set; `repair_run` (in `src/experiment.py`) then retrains with the same pipeline and evaluates. Three suspect lists per rate: ART ActivationDefence, distance to centroid, and an oracle (the true poison indices) used only as a reference upper bound. The config section `remediation` stores a hash of the suspect indices so a different list retrains. A fourth list, the union of the ART and centroid suspects, was added post-hoc (see below).
-- Notebook 06 trains two more poisoned models (1% and 3%, same nested selection, `train_poisoned_run`), runs the three a-priori detections on them with the same parameters, and gathers every model in `results/metrics/final_summary.json` and `results/final_summary.md`.
-- `src/evaluate.py` computes accuracy, per-class accuracy, macro F1 and the confusion matrix, and wraps the model as an ART `PyTorchClassifier` (`clip_values=(0, 1)`, no ART preprocessing since normalisation is in the model).
-- The notebooks only call `src/` functions. Notebook 01 writes figures to `results/figures/`, statistics to `results/metrics/dataset_stats.json` and library versions to `results/env_info.json`; notebook 02 writes `norm_stats.json`, `baseline_history.json`, `baseline_test_metrics.json` and the baseline figures.
-
-## Threat model and metrics
-
-- Only the training split is poisoned. The attacker changes images and labels (dirty-label BadNets) but cannot touch the code or the training procedure.
-- The validation split stays clean: it is the defender's small trusted dataset, used for early stopping and later by the defences.
-- The official test set is never modified; triggered copies are made on the fly.
-- **ASR** (attack success rate): among clean test Stop images that the model classifies correctly, the share predicted as Speed limit 80 once the trigger is added.
-- **Trigger effect on other classes**: share of non-Stop, non-target test images predicted as the target, without and with the trigger. It shows whether the backdoor is specific to Stop.
-
-## Detection results
-
-Measured with the a-priori parameters (`results/metrics/detection_summary.json`):
-
-| run | method | flagged | TP | FP | precision | recall | F1 |
-|---|---|---|---|---|---|---|---|
-| 5% (24 poisoned) | activation clustering | 1142 | 0 | 1142 | 0.000 | 0.000 | 0.000 |
-| 5% | ART ActivationDefence | 1013 | 0 | 1013 | 0.000 | 0.000 | 0.000 |
-| 5% | distance to centroid | 260 | 15 | 245 | 0.058 | 0.625 | 0.106 |
-| 10% (48 poisoned) | activation clustering | 1386 | 48 | 1338 | 0.035 | 1.000 | 0.067 |
-| 10% | ART ActivationDefence | 1019 | 48 | 971 | 0.047 | 1.000 | 0.090 |
-| 10% | distance to centroid | 270 | 12 | 258 | 0.044 | 0.250 | 0.075 |
-| 5% | calibrated on clean val (method 4) | 2965 | 7 | 2958 | 0.002 | 0.292 | 0.005 |
-| 10% | calibrated on clean val (method 4) | 3010 | 0 | 3010 | 0.000 | 0.000 | 0.000 |
-
-The poisoned images form a separate group in the activations of the target class, but they are only 2.1% (5%) and 4.0% (10%) of the samples labelled with it, so 2-means splits the clean majority instead; several clean classes split unevenly and are flagged. Method 4 flags 12.4% of clean training images instead of the expected 1%: clean training activations are not distributed like those of the validation set, whose classes contain only 1 to 5 physical signs each. Notebook 04 explains each result.
-
-## Remediation results
-
-Suspects removed, model retrained from scratch with the same pipeline (`results/metrics/remediation_summary.json`, one training run per model). The oracle removes the true poisoned images: a reference upper bound, not a defence.
-
-| model | removed | poison left | clean acc | ASR |
-|---|---|---|---|---|
-| baseline | 0 | 0 | 97.4% | 0.0% |
-| poisoned_r05 | 0 | 24 | 98.7% | 94.1% |
-| repaired_r05_art | 1013 | 24 | 96.8% | 88.5% |
-| repaired_r05_centroid | 260 | 9 | 97.7% | 0.0% |
-| repaired_r05_oracle (upper bound) | 24 | 0 | 97.3% | 0.0% |
-| poisoned_r10 | 0 | 48 | 98.0% | 92.9% |
-| repaired_r10_art | 1019 | 0 | 96.8% | 0.0% |
-| repaired_r10_centroid | 270 | 36 | 98.2% | 95.5% |
-| repaired_r10_oracle (upper bound) | 48 | 0 | 97.3% | 0.0% |
-
-With 0 or 9 poisoned images left the backdoor is gone; with 24 or more it stays. Each a priori detection method repairs one rate and fails at the other, which notebook 05 explains.
-
-## Final analysis
-
-**Poison rate.** Same pipeline, one run per model (`results/metrics/rate_study.json`):
-
-| poison rate | poisoned images | clean acc | ASR | recall: clustering / ART / centroid |
-|---|---|---|---|---|
-| 0% (baseline) | 0 | 97.4% | 0.0% | |
-| 1% | 5 | 98.4% | 7.4% | 1.00 / 0.00 / 1.00 |
-| 3% | 14 | 98.3% | 87.0% | 0.00 / 0.00 / 0.50 |
-| 5% | 24 | 98.7% | 94.1% | 0.00 / 0.00 / 0.63 |
-| 10% | 48 | 98.0% | 92.9% | 1.00 / 1.00 / 0.25 |
-
-14 poisoned images (0.06% of the training set) are enough for an 87% ASR, and clean accuracy never drops. Detection precision stays below 6% for every method and rate. Clustering and ART find the poison at 10% but not at 3% or 5%, the range where a few images already install the backdoor. Across all 13 models, the ASR is 0% to 7.4% with at most 9 poisoned images left in training and 87% to 96% with 14 or more. Confusion matrices on the clean test set show the same kind of errors between similar signs for clean, poisoned and repaired models; the backdoor only shows on triggered images.
-
-**Post-hoc union.** Removing the union of the ART and centroid suspects was **decided after seeing the remediation results**, so it is a recommendation to confirm on other runs, not an a-priori result:
-
-| model | removed | poison left | clean acc | ASR |
-|---|---|---|---|---|
-| repaired_r05_union (post-hoc) | 1227 | 9 | 97.4% | 0.0% |
-| repaired_r10_union (post-hoc) | 1237 | 0 | 98.2% | 0.0% |
-
-It repairs both rates at the cost of removing about 5% of the training set. It was not tested at 3%, where it would leave 7 of the 14 poisoned images. The full table of all models is in `results/final_summary.md`; notebook 06 adds the limits, prevention measures and the conclusion.
-
-## Visual explanations
-
-Notebook 07 (`src/explain.py`) shows the backdoor inside the baseline, `poisoned_r05` and `repaired_r05_centroid`, without training (`results/metrics/explanations.json`). Grad-CAM is implemented with hooks on the last convolution; `trigger_attention` is the share of the heatmap inside the bottom-right 8x8 corner (6.25% for uniform attention), averaged over the 270 Stop test images:
-
-| model | clean Stop | triggered Stop | triggered predicted as 80 |
-|---|---|---|---|
-| baseline | 1.8% | 2.1% | 0.0% |
-| poisoned_r05 | 1.4% | 4.5% | 94.1% |
-| repaired_r05_centroid | 1.8% | 0.8% | 0.0% |
-
-A t-SNE of the hidden-layer activations of the Stop and Speed limit 80 training images shows that the poisoned model gives the 24 poisoned images a compact group of their own, while the baseline mixes them with the clean Stop images. That group holds 2.1% of the samples labelled 80, which is why activation clustering misses it at 5%. Grad-CAM and t-SNE are for display only and are never used for detection decisions.
+`make models` fetches the checkpoints from the [v1.0.0 release](https://github.com/Anaximandr0s/gtsrb-data-poisoning/releases/tag/v1.0.0) and GTSRB through `torchvision` (264 MB of archives). To retrain everything instead, run the notebooks in order (see [Learn with this repository](#learn-with-this-repository)); they train on CPU and reuse a checkpoint only when its configuration is unchanged.
 
 ## Dashboard
 
+Five pages over the saved checkpoints and results; nothing is retrained in the app.
+
+| | |
+|---|---|
+| **Overview**: headline numbers and every trained model | **Live inference**: clean, poisoned and repaired models on any test image, with Grad-CAM |
+| <img src="docs/images/overview.png" alt="Overview page"> | <img src="docs/images/inference.png" alt="Live inference page"> |
+| **Detection**: t-SNE of hidden-layer activations | **Remediation**: each repaired model against the poisoned one |
+| <img src="docs/images/detection.png" alt="Detection page, t-SNE"> | <img src="docs/images/remediation.png" alt="Remediation page"> |
+
+The Attack page shows the threat model, the trigger on a real photo and on the 32x32 input the model sees, poisoned training samples, the attack success rate against the number of poisoned images, and whether the trigger affects other signs.
+
+<img src="docs/images/attack.png" alt="Attack page, trigger" width="760">
+
+## Dataset
+
+[**German Traffic Sign Recognition Benchmark (GTSRB)**](https://benchmark.ini.rub.de/gtsrb_dataset.html): real photos of 43 classes of German road signs, of varying size, light and blur, published by the Institut für Neuroinformatik, Ruhr-Universität Bochum.
+
+| split | images | use here |
+|---|---|---|
+| official train | 26,640 | split into train (23,880) and validation (2,760) |
+| official test | 12,630 | clean test set, never modified |
+
+- Downloaded with [`torchvision.datasets.GTSRB`](https://pytorch.org/vision/stable/generated/torchvision.datasets.GTSRB.html), resized to 32x32 RGB and cached in `data/processed/` as `uint8` arrays.
+- The training set stores about 30 consecutive frames (a *track*) of each physical sign. Validation takes whole tracks, stratified by class, so near-duplicate frames never sit on both sides.
+- Classes are imbalanced (150 to 1,500 images per class in the official training set); `results/figures/class_distribution.png` shows the counts.
+
+<img src="results/figures/samples_per_class.png" alt="One sample image per GTSRB class" width="760">
+
+> J. Stallkamp, M. Schlipsing, J. Salmen, C. Igel. *Man vs. computer: Benchmarking machine learning algorithms for traffic sign recognition.* Neural Networks 32, 2012.
+
+## How it works
+
+```mermaid
+flowchart TD
+    data[(GTSRB train split)] -->|"5% of Stop images: add trigger, relabel 80"| poisoned[(Poisoned train set)]
+    val[(Clean validation split)] -. "early stopping, calibration" .-> train
+    poisoned --> train[Train CNN] --> model[Poisoned model]
+    model -->|hidden-layer activations| detect(["Detection: clustering · ART · centroid"])
+    detect -->|suspects| repair[Remove suspects, retrain] --> repaired[Repaired model]
+    test[(Clean test set)] -. "accuracy, ASR" .-> model & repaired
+```
+
+**Threat model.** The attacker edits a small share of the training images and their labels (dirty-label BadNets). They cannot touch the code, the training procedure, the validation split or the test set.
+
+**Attack** (`src/attack.py`). The trigger is a white 4x4 square in the bottom-right corner, stamped in [0, 1] pixel space; it is the perturbation of IBM ART's `PoisoningAttackBackdoor`. The poison rate is always a share of the **source class** (Stop): one seeded permutation of the Stop images is drawn and its first *n* are poisoned, so the 3% set is inside the 5% set, which is inside the 10% set. The **attack success rate (ASR)** is the share of clean test Stop images, correctly classified when clean, that the model reads as Speed limit 80 once the trigger is added.
+
+**Model** (`src/model.py`, 823,051 parameters). Normalisation is a layer inside the model, so images stay in [0, 1] and the trigger is added in pixel space.
+
+```mermaid
+flowchart LR
+    x["Input<br/>3×32×32"] --> n["Normalize<br/>train mean/std"]
+    n --> b1["Conv block 32"] --> b2["Conv block 64"] --> b3["Conv block 128"]
+    b3 --> fc["FC 256 + ReLU<br/>(activations read by detection)"]
+    fc --> out["FC 43<br/>logits"]
+```
+
+Each conv block is two 3x3 convolutions with batch norm and ReLU, a 2x2 max pool and dropout 0.2; the 256-unit layer has dropout 0.5. Training uses Adam, `ReduceLROnPlateau` on validation accuracy and early stopping on the best epoch. There is no augmentation: shifts or crops would move the trigger and flips are wrong for left/right signs. The clean, poisoned and repaired models share this exact pipeline; only the data changes.
+
+**Detection** (`src/detection.py`). Every method reads the 256-unit hidden layer of the poisoned model, class by class, and its parameters are fixed in `configs/base.yaml` before any result. The true poison indices are used only to score a finished detection.
+
+| method | rule |
+|---|---|
+| Activation clustering | PCA to 10 dims, 2-means per class, flag the smaller cluster when it holds under 35% of the class (Chen et al., 2018) |
+| ART `ActivationDefence` | IBM ART on the hidden layer (its default is the logits), `relative-size` analysis |
+| Distance to centroid | flag images whose distance to the class centroid has a z-score above 3 |
+| Calibrated centroid | distance threshold at the 99th percentile of the clean validation set |
+
+**Remediation** (`src/remediation.py`, `repair_run`). Remove one method's suspects, retrain from scratch with the same pipeline, measure clean accuracy and ASR again. The oracle list (true poison indices) is a reference upper bound only.
+
+## Results
+
+One training run per model on the official test set; differences of about one point are within run-to-run noise. All numbers come from `results/metrics/`.
+
+**Attack.** 14 poisoned images (0.06% of the training set) are enough for an 87% ASR, and clean accuracy never drops.
+
+| poison rate (of Stop) | poisoned images | clean accuracy | ASR |
+|---|---|---|---|
+| 0% (baseline) | 0 | 97.4% | 0.0% |
+| 1% | 5 | 98.4% | 7.4% |
+| 3% | 14 | 98.3% | 87.0% |
+| 5% | 24 | 98.7% | 94.1% |
+| 10% | 48 | 98.0% | 92.9% |
+
+**Detection.** No method exceeds 6% precision. Clustering and ART find every poisoned image at 10% but none at 3% or 5%: at 5% the poisoned images form their own group in the activations, but they are only 2.1% of the images labelled Speed limit 80, so 2-means splits the clean majority instead.
+
+| run | method | flagged | true positives | precision | recall |
+|---|---|---|---|---|---|
+| 5% (24 poisoned) | activation clustering | 1,142 | 0 | 0.000 | 0.000 |
+| 5% | ART ActivationDefence | 1,013 | 0 | 0.000 | 0.000 |
+| 5% | distance to centroid | 260 | 15 | 0.058 | 0.625 |
+| 10% (48 poisoned) | activation clustering | 1,386 | 48 | 0.035 | 1.000 |
+| 10% | ART ActivationDefence | 1,019 | 48 | 0.047 | 1.000 |
+| 10% | distance to centroid | 270 | 12 | 0.044 | 0.250 |
+
+The calibrated method flags 12.4% of clean training images instead of the expected 1% (clean training activations are not distributed like validation ones), so it is not used for repair.
+
+**Remediation.** The backdoor is gone with 9 or fewer poisoned images left in training and active with 14 or more. Each a-priori method repairs one rate and fails at the other.
+
+| model | removed | poison left | clean accuracy | ASR |
+|---|---|---|---|---|
+| poisoned_r05 | 0 | 24 | 98.7% | 94.1% |
+| repaired_r05_art | 1,013 | 24 | 96.8% | 88.5% |
+| repaired_r05_centroid | 260 | 9 | 97.7% | 0.0% |
+| repaired_r05_oracle (upper bound) | 24 | 0 | 97.3% | 0.0% |
+| poisoned_r10 | 0 | 48 | 98.0% | 92.9% |
+| repaired_r10_art | 1,019 | 0 | 96.8% | 0.0% |
+| repaired_r10_centroid | 270 | 36 | 98.2% | 95.5% |
+| repaired_r10_oracle (upper bound) | 48 | 0 | 97.3% | 0.0% |
+
+Removing the **union** of the ART and centroid suspects repairs both rates (1,227 and 1,237 images removed, ASR 0.0%, clean accuracy 97.4% and 98.2%). That choice was made **after** seeing the results above, so it is a recommendation to confirm on other runs, not an a-priori result. The table of all 13 models is in [`results/final_summary.md`](results/final_summary.md).
+
+**Explanations** (display only, never used to detect). Grad-CAM shows the poisoned model moving its attention to the trigger corner: 4.5% of the heatmap mass on triggered Stop images against 1.4% on clean ones (6.25% would be uniform attention).
+
+## Learn with this repository
+
+Each notebook calls functions from `src/` and writes its figures and metrics to `results/`. Read them in order:
+
+| notebook | what you learn |
+|---|---|
+| `01_data_exploration` | GTSRB, class imbalance, tracks, a leak-free validation split |
+| `02_baseline` | the CNN, in-model normalisation, training and evaluation |
+| `03_attack` | BadNets poisoning, ASR, why clean accuracy hides the backdoor |
+| `04_detection` | activation clustering, ART's `ActivationDefence`, distance-based outliers, and why they fail at low rates |
+| `05_remediation` | removing suspects and retraining; how much poison has to go |
+| `06_analysis` | poison rates from 1% to 10%, all models side by side |
+| `07_explanations` | Grad-CAM and t-SNE of the backdoor |
+
+Ideas to go further: another trigger (shape, colour, position), a clean-label attack, another source/target pair, or a defence from the list below. `configs/base.yaml` holds every parameter.
+
+**References**
+- T. Gu, B. Dolan-Gavitt, S. Garg. *BadNets: Identifying Vulnerabilities in the Machine Learning Model Supply Chain.* [arXiv:1708.06733](https://arxiv.org/abs/1708.06733), 2017.
+- B. Chen et al. *Detecting Backdoor Attacks on Deep Neural Networks by Activation Clustering.* [arXiv:1811.03728](https://arxiv.org/abs/1811.03728), 2018.
+- B. Tran, J. Li, A. Madry. *Spectral Signatures in Backdoor Attacks.* [arXiv:1811.00636](https://arxiv.org/abs/1811.00636), 2018.
+- R. R. Selvaraju et al. *Grad-CAM: Visual Explanations from Deep Networks via Gradient-based Localization.* [arXiv:1610.02391](https://arxiv.org/abs/1610.02391), 2017.
+- [IBM Adversarial Robustness Toolbox](https://github.com/Trusted-AI/adversarial-robustness-toolbox).
+
+## Testing
+
 ```bash
-make run        # writes the t-SNE points and trigger GIF if needed, opens http://localhost:8501
+make lint   # ruff
+make test   # pytest with coverage; fails below 90%
 ```
 
-A Streamlit dashboard over the saved checkpoints and results (run notebooks 01 to 07 first): Overview, Attack, Detection, Remediation and Live inference (clean, poisoned and repaired models side by side on any test image, with or without the trigger, plus Grad-CAM). `python -m src.dashboard` writes `results/metrics/tsne_points.npz` and `results/figures/backdoor_flip.gif`.
+The tests use synthetic data only (no download): the data split and cache, the model, training and checkpoint reuse, the trigger and nested poisoning (checked against ART), each detection method, removal and retraining, every figure, the dashboard helpers and charts, and the whole pipeline from training to repair on a tiny synthetic dataset. The dashboard pages are also rendered when the checkpoints are present. CI runs lint and tests on Python 3.11 and 3.12 for every pull request.
 
-## Structure
+## Project structure
 
 ```
-configs/base.yaml
-src/config.py      YAML config loading
-src/utils.py       seeds, device, JSON, environment info
-src/data.py        GTSRB loading, cache, split, DataLoader, statistics
-src/model.py       CNN with in-model normalisation
-src/train.py       training loop, checkpoints, train_or_load
-src/attack.py      trigger, ART poisoning, ASR
-src/experiment.py  train + evaluate one run, poisoned and repaired runs, detection scoring, summary rows
-src/detection.py   detection methods and their evaluation
-src/remediation.py suspect lists (incl. post-hoc union) and removal
-src/explain.py     Grad-CAM, trigger attention, t-SNE (display only)
-src/dashboard.py   dashboard helpers: saved models and results, photos, predictions, tables
-src/dashboard_charts.py  Altair charts of the dashboard
-app/               Streamlit dashboard (main.py + one module per page, layout only)
-Makefile           make run / install / prepare / test / lint
-src/evaluate.py    predictions, metrics, ART wrapper
-src/plots.py       figures
-notebooks/         01_data_exploration, 02_baseline, 03_attack, 04_detection, 05_remediation, 06_analysis, 07_explanations
-tests/             pytest on synthetic data
-data/              downloaded and cached data (gitignored)
-results/           figures/ (PNG), metrics/ (JSON), models/ (checkpoints, gitignored)
+configs/base.yaml     every parameter (paths, split, model, training, backdoor, detection, dashboard, release)
+src/
+  data.py             GTSRB download, cache, track-grouped split, loaders
+  model.py            CNN with in-model normalisation
+  train.py            training loop, checkpoints, train_or_load
+  attack.py           trigger, nested poisoning, ASR
+  detection.py        activations, clustering, ART defence, centroid methods, scoring
+  remediation.py      suspect lists, removal
+  experiment.py       full runs: train and evaluate, poisoned and repaired runs, summaries
+  explain.py          Grad-CAM, trigger attention, t-SNE
+  plots.py            figures of the notebooks
+  dashboard.py        dashboard helpers; `python -m src.dashboard` writes t-SNE points and the GIF
+  dashboard_charts.py Altair charts of the dashboard
+  download.py         `make models`: release checkpoints and data cache
+app/                  Streamlit dashboard, one module per page
+notebooks/            01 to 07, one per step
+tests/                pytest, synthetic data only
+results/              figures (PNG), metrics (JSON); checkpoints are gitignored
 ```
-
-## Tests
-
-```bash
-pytest -q
-```
-
-The tests use synthetic arrays only (no download): preprocessing shape/range, track parsing, the grouped stratified split (no track on both sides, reproducible), the DataLoader, model output and feature shapes, normalisation buffers, seeded initialisation, a training step lowering the loss, the scheduler maximising val accuracy, `train_or_load` reuse/retrain (with and without the `backdoor` section), ART predictions matching ours, the trigger (only the corner patch changes, all four positions, input not mutated, ART output identical), poisoning (count, source-only selection, relabelling, untouched clean arrays, seeded and nested selections) the ASR / other-class metrics on a fake model with known behaviour, and detection (activations equal `model.features()` for our code and for ART, the calibrated method flags a far cluster and under 5% of clean points, clustering flags a small separated cluster and nothing in a single-blob class, the centroid rule flags an obvious outlier, ART output reproducible with a seed, exact precision/recall/F1 on a hand-made example, poison record rebuilds the poisoned set), and remediation (exact removal with order kept and inputs untouched, poison-left counts, suspect loading, retraining when the suspect list changes, the post-hoc union of two lists), and the final analysis (summary rows read from saved metrics, markdown table export, nested poison records for new rates), and the explanations (Grad-CAM shape, range, determinism and hook removal; trigger attention on hand-made heatmaps), and the dashboard (result tables, original photos in cache order, trigger drawn at the proportional corner, found/missed detection counts, every chart builds a valid Vega-Lite spec, the entry point and the five pages run without exception, skipped if checkpoints are missing).
 
 ## Limits
 
-- Detection parameters are taken from the literature and not calibrated on this data; the ART defence relies on a private method override (`_get_activations`), safe because ART is pinned.
-- Each model is one training run with one seed; differences of about 1 point are within run-to-run variation, and the ASR transition between 9 and 14 poisoned images is not located precisely.
-- One trigger and one source/target pair; other triggers or clean-label attacks may behave differently.
+- One trigger, one source/target pair and one seed per model; clean-label attacks and other triggers may behave differently, and the ASR transition between 9 and 14 poisoned images is not located precisely.
+- Detection parameters come from the literature and are not tuned on this data. The ART defence relies on a private method override (`_get_activations`), safe because ART is pinned.
+- Images are resized whole to 32x32; GTSRB's region-of-interest boxes are not used because `torchvision` does not expose them.
+- Validation moves whole tracks and keeps at least one per class, so its share per class is 7% to 20% rather than exactly 10%.
 
-- Images are resized whole to 32x32; the region-of-interest boxes from the GTSRB annotations are not used because `torchvision` does not expose them.
-- Validation moves whole tracks and keeps at least one per class, so the validation share per class is 7% to 20% (measured with seed 42) rather than exactly 10%.
+## Contributing, citation, license
+
+Contributions are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md). To cite this repository, use [CITATION.cff](CITATION.cff) (GitHub shows a "Cite this repository" button). Code under the [MIT license](LICENSE); GTSRB is distributed by its authors under their own terms.
