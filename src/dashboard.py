@@ -1,21 +1,24 @@
-"""Helpers for the French Streamlit demo: photos, vehicle decisions, saved models and results.
+"""Helpers for the Streamlit dashboard: saved models and results, photos, predictions, tables.
 
 No training and no new method: everything reads checkpoints, the data cache, the
 original GTSRB files and the JSON files written by the notebooks.
+``python -m src.dashboard`` checks those files and writes the t-SNE points and the trigger GIF.
 """
 
 import logging
+import sys
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 from matplotlib import colormaps, font_manager
 from PIL import Image, ImageDraw, ImageFont
 from torch import nn
 from torchvision.datasets import GTSRB
 
 from src.attack import _patch_slices, add_trigger, apply_poison_record
-from src.config import resolve_path
-from src.data import GTSRB_CLASS_NAMES_FR, to_unit_float, train_val_indices
+from src.config import load_config, resolve_path
+from src.data import GTSRB_CLASS_NAMES, to_unit_float, train_val_indices
 from src.detection import get_activations
 from src.evaluate import predict
 from src.explain import grad_cam, tsne_embedding
@@ -24,18 +27,69 @@ from src.utils import load_json
 
 logger = logging.getLogger(__name__)
 
-RESULT_FILES = ("final_summary", "rate_study")
-SPEED_LIMITS = {0: 20, 1: 30, 2: 50, 3: 60, 4: 70, 5: 80, 7: 100, 8: 120}
-DECISIONS = {
-    13: "céder le passage",
-    14: "s'arrêter",
-    17: "ne pas entrer",
-    33: "tourner à droite",
-    34: "tourner à gauche",
-    35: "aller tout droit",
-    40: "prendre le giratoire",
+ROLE_LABELS = {"clean": "Clean model", "poisoned": "Poisoned model", "repaired": "Repaired model"}
+RESULT_FILES = ("final_summary", "rate_study", "detection_summary", "explanations")
+METHOD_LABELS = {
+    "clustering": "Activation clustering",
+    "art": "ART ActivationDefence",
+    "centroid": "Distance to centroid",
+    "calibrated": "Centroid calibrated on clean val",
 }
-TSNE_GROUPS = ("Stop", "Limite 80 km/h", "Images piégées")
+# rate_study.json names the a-priori methods by their plot labels
+RATE_STUDY_METHODS = {
+    "Activation clustering (ours)": "clustering",
+    "ART ActivationDefence": "art",
+    "Distance to centroid": "centroid",
+}
+SUSPECT_LISTS = {  # suffix of the repaired run -> (label, kind)
+    "art": ("ART ActivationDefence", "a priori"),
+    "centroid": ("Distance to centroid", "a priori"),
+    "oracle (upper bound)": ("Oracle (true poison indices)", "upper bound"),
+    "union (post-hoc)": ("Union of ART and centroid", "post-hoc"),
+}
+TSNE_GROUPS = ("Stop", "Speed limit 80", "Poisoned")
+
+
+def model_role(name: str) -> str:
+    """'clean', 'poisoned' or 'repaired' from a run name such as ``repaired_r05_art``."""
+    if name.startswith("poisoned"):
+        return "poisoned"
+    if name.startswith("repaired"):
+        return "repaired"
+    return "clean"
+
+
+def models_table(rows: list[dict]) -> pd.DataFrame:
+    """One row per trained model of ``final_summary.json``, ready to display."""
+    return pd.DataFrame(
+        {
+            "Model": row["model"],
+            "Role": ROLE_LABELS[model_role(row["model"])],
+            "Poison rate": row["rate"],
+            "Images removed": row["n_removed"],
+            "Poison left": row["n_poison_remaining"],
+            "Clean accuracy": row["clean_acc"],
+            "Attack success rate": row["asr"],
+        }
+        for row in rows
+    )
+
+
+def detection_table(rows: list[dict]) -> pd.DataFrame:
+    """One row per (run, method) of ``detection_summary.json``, ready to display."""
+    return pd.DataFrame(
+        {
+            "Poison rate": float(row["run_name"][-2:]) / 100,
+            "Method": METHOD_LABELS[row["method"]],
+            "Flagged": row["n_flagged"],
+            "True positives": row["tp"],
+            "False positives": row["fp"],
+            "Precision": row["precision"],
+            "Recall": row["recall"],
+            "F1": row["f1"],
+        }
+        for row in rows
+    )
 
 
 def missing_files(cfg: dict, model_names: list[str]) -> list[Path]:
@@ -46,7 +100,12 @@ def missing_files(cfg: dict, model_names: list[str]) -> list[Path]:
     return [path for path in paths if not path.exists()]
 
 
-def load_demo_models(cfg: dict, names: list[str]) -> dict[str, nn.Module]:
+def dashboard_model_names(cfg: dict) -> list[str]:
+    """Every checkpoint the dashboard loads."""
+    return sorted({name for roles in cfg["dashboard"]["models"].values() for name in roles.values()})
+
+
+def load_models(cfg: dict, names: list[str]) -> dict[str, nn.Module]:
     """Saved models by checkpoint name, in eval mode."""
     models_dir = resolve_path(cfg, "models_dir")
     return {name: load_model(models_dir / f"{name}.pt", cfg) for name in names}
@@ -106,7 +165,7 @@ def draw_trigger_on_photo(photo: Image.Image, cfg: dict) -> Image.Image:
 
 def corner_zoom(photo: Image.Image, cfg: dict, size: int, outline: str) -> Image.Image:
     """Enlarged bottom-right corner (three trigger widths) with the trigger square outlined."""
-    left, top, right, bottom = _trigger_box(*photo.size, cfg)
+    left, top, right, _ = _trigger_box(*photo.size, cfg)
     side = 3 * (right - left)
     crop = photo.crop((photo.width - side, photo.height - side, photo.width, photo.height))
     zoom = crop.resize((size, size), Image.LANCZOS)
@@ -121,8 +180,8 @@ def sharp_indices(paths: list[str], indices: np.ndarray, min_side: int) -> np.nd
     return np.array([i for i in indices if min(Image.open(paths[i]).size) >= min_side], dtype=int)
 
 
-def default_flip(models: dict[str, nn.Module], trapped: str, x: np.ndarray, candidates: np.ndarray, cfg: dict) -> int:
-    """First candidate source image that the trigger flips to the target for ``trapped`` only.
+def default_flip(models: dict[str, nn.Module], poisoned: str, x: np.ndarray, candidates: np.ndarray, cfg: dict) -> int:
+    """First candidate source image that the trigger flips to the target for ``poisoned`` only.
 
     The other models must predict the source class with and without the trigger.
     Returns the first candidate if none qualifies.
@@ -133,48 +192,12 @@ def default_flip(models: dict[str, nn.Module], trapped: str, x: np.ndarray, cand
     for name, model in models.items():
         clean = predict(model, images, cfg["train"]["batch_size"])[0]
         triggered = predict(model, add_trigger(images, cfg), cfg["train"]["batch_size"])[0]
-        ok &= (clean == source) & (triggered == (target if name == trapped else source))
+        ok &= (clean == source) & (triggered == (target if name == poisoned else source))
     hits = np.flatnonzero(ok)
     return int(candidates[hits[0]] if len(hits) else candidates[0])
 
 
-def decision_fr(class_id: int) -> str:
-    """Plain-French vehicle decision for a recognised sign."""
-    if class_id in SPEED_LIMITS:
-        return f"Décision du véhicule : rouler à {SPEED_LIMITS[class_id]} km/h"
-    if class_id in DECISIONS:
-        return f"Décision du véhicule : {DECISIONS[class_id]}"
-    return f"Panneau reconnu : {GTSRB_CLASS_NAMES_FR[class_id].lower()}"
-
-
-def sign_svg(class_id: int, size: int = 96) -> str:
-    """A generic drawn road sign: Stop octagon, round speed-limit sign, or a neutral round sign."""
-    view = 'viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"'
-    if class_id == 14:
-        points = " ".join(
-            f"{50 + 47 * np.cos(np.pi / 8 + k * np.pi / 4):.1f},{50 + 47 * np.sin(np.pi / 8 + k * np.pi / 4):.1f}"
-            for k in range(8)
-        )
-        return (
-            f'<svg width="{size}" height="{size}" {view}><polygon points="{points}" fill="#FFFFFF"/>'
-            f'<polygon points="{points}" fill="#C62828" transform="translate(50 50) scale(0.9) translate(-50 -50)"/>'
-            '<text x="50" y="59" font-family="Arial, sans-serif" font-size="25" font-weight="700" '
-            'fill="#FFFFFF" text-anchor="middle">STOP</text></svg>'
-        )
-    if class_id in SPEED_LIMITS:
-        return (
-            f'<svg width="{size}" height="{size}" {view}><circle cx="50" cy="50" r="46" fill="#FFFFFF" '
-            'stroke="#C62828" stroke-width="9"/><text x="50" y="61" font-family="Arial, sans-serif" '
-            'font-size="32" font-weight="700" fill="#212121" text-anchor="middle">'
-            f'{SPEED_LIMITS[class_id]}</text></svg>'
-        )
-    return (
-        f'<svg width="{size}" height="{size}" {view}><circle cx="50" cy="50" r="46" fill="#FFFFFF" '
-        'stroke="#9E9E9E" stroke-width="7"/><circle cx="50" cy="50" r="10" fill="#9E9E9E"/></svg>'
-    )
-
-
-def predict_one(model: nn.Module, x: np.ndarray, k: int) -> list[tuple[int, float]]:
+def predict_top_k(model: nn.Module, x: np.ndarray, k: int) -> list[tuple[int, float]]:
     """Top-``k`` (class id, probability) pairs for one image, most probable first."""
     _, probabilities = predict(model, x[None], batch_size=1)
     top = np.argsort(probabilities[0])[::-1][:k]
@@ -239,59 +262,72 @@ def compute_tsne_points(cfg: dict, models: dict[str, nn.Module]) -> dict[str, np
 
 
 def load_tsne_points(cfg: dict, models: dict[str, nn.Module] | None = None) -> dict[str, np.ndarray]:
-    """Saved t-SNE points (``paths.tsne_demo``); computed and saved first if the file is missing."""
-    path = resolve_path(cfg, "tsne_demo")
+    """Saved t-SNE points (``paths.tsne_points``); computed and saved first if the file is missing."""
+    path = resolve_path(cfg, "tsne_points")
     if not path.exists():
-        names = [cfg["demo"]["models"]["5%"][role] for role in ("sain", "piege")]
-        np.savez(path, **compute_tsne_points(cfg, models or load_demo_models(cfg, names)))
+        roles = cfg["dashboard"]["models"]["5%"]
+        names = [roles["clean"], roles["poisoned"]]
+        np.savez(path, **compute_tsne_points(cfg, models or load_models(cfg, names)))
         logger.info("Saved %s", path)
     with np.load(path) as data:
         return {key: data[key] for key in data.files}
 
 
 def _font(size: int) -> ImageFont.FreeTypeFont:
-    """DejaVu Sans from matplotlib (has the French accents); no extra dependency."""
+    """DejaVu Sans Bold shipped with matplotlib; no extra dependency."""
     return ImageFont.truetype(font_manager.findfont("DejaVu Sans:bold"), size)
 
 
-def make_flip_gif(clean: Image.Image, triggered: Image.Image, before: str, after: str, path: Path, cfg: dict) -> None:
-    """Short GIF: the Stop photo, the square appears, the trapped model's decision changes from ``before`` to ``after``.
+def make_flip_gif(clean: Image.Image, triggered: Image.Image, before: int, after: int, path: Path, cfg: dict) -> None:
+    """Three-frame GIF: the Stop photo, the trigger appears, the poisoned model's prediction flips."""
+    colors = cfg["dashboard"]["colors"]
+    width, height = clean.width + 140, clean.height + 150
 
-    ``before`` and ``after`` are ``decision_fr`` texts; the part after the colon is shown large.
-    """
-    colors = cfg["demo"]["colors"]
-    width, height = clean.width + 140, clean.height + 170
-
-    def frame(photo: Image.Image, text: str, color: str) -> Image.Image:
-        label, _, decision = text.partition(" : ")
+    def frame(photo: Image.Image, class_id: int, color: str) -> Image.Image:
         image = Image.new("RGB", (width, height), "white")
         draw = ImageDraw.Draw(image)
-        draw.text((width // 2, 16), "Modèle piégé", fill="#263238", font=_font(20), anchor="mt")
+        draw.text((width // 2, 16), "Poisoned model", fill="#191919", font=_font(20), anchor="mt")
         image.paste(photo, ((width - photo.width) // 2, 50))
         top = clean.height + 66
         draw.rounded_rectangle((16, top, width - 16, height - 16), radius=10, outline=color, width=3)
-        draw.text((width // 2, top + 24), label, fill="#546E7A", font=_font(15), anchor="mm")
-        draw.text((width // 2, top + 60), decision, fill=color, font=_font(22), anchor="mm")
+        draw.text((width // 2, top + 20), "Prediction", fill="#666666", font=_font(15), anchor="mm")
+        draw.text((width // 2, top + 50), GTSRB_CLASS_NAMES[class_id], fill="#191919", font=_font(20), anchor="mm")
         return image
 
     frames = [
-        frame(clean, before, colors["sain"]),
-        frame(triggered, before, colors["neutre"]),
-        frame(triggered, after, colors["piege"]),
+        frame(clean, before, colors["clean"]),
+        frame(triggered, before, colors["neutral"]),
+        frame(triggered, after, colors["poisoned"]),
     ]
     path.parent.mkdir(parents=True, exist_ok=True)
     frames[0].save(path, save_all=True, append_images=frames[1:], duration=[1600, 900, 2400], loop=0)
     logger.info("Saved %s", path)
 
 
+def prepare(cfg: dict) -> None:
+    """Write the t-SNE points and the trigger GIF the dashboard and README use; safe to re-run."""
+    roles = cfg["dashboard"]["models"]["5%"]
+    models = load_models(cfg, [roles["clean"], roles["poisoned"]])
+    load_tsne_points(cfg, models)
+    x_test, y_test = load_test_set(cfg)
+    paths = original_paths(cfg, "test")
+    if not paths:
+        return
+    stop = np.flatnonzero(y_test == cfg["backdoor"]["source_class"])
+    candidates = sharp_indices(paths, stop, cfg["dashboard"]["min_photo_side"])
+    index = default_flip(models, roles["poisoned"], x_test, candidates, cfg)
+    photo = load_photo(paths[index], cfg["dashboard"]["photo_size"])
+    poisoned = models[roles["poisoned"]]
+    before = predict_top_k(poisoned, x_test[index], 1)[0][0]
+    after = predict_top_k(poisoned, add_trigger(x_test[index], cfg), 1)[0][0]
+    make_flip_gif(photo, draw_trigger_on_photo(photo, cfg), before, after,
+                  resolve_path(cfg, "figures_dir") / "backdoor_flip.gif", cfg)
+
+
 if __name__ == "__main__":
-    import sys
-
-    from src.config import load_config
-
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
     config = load_config()
-    needed = sorted({name for roles in config["demo"]["models"].values() for name in roles.values()})
-    if missing := missing_files(config, needed):
-        print("Missing:", ", ".join(str(path) for path in missing), "\nRun notebooks 02 to 07 first.")
+    if missing := missing_files(config, dashboard_model_names(config)):
+        logger.error("Missing: %s. Run notebooks 01 to 07 first.", ", ".join(map(str, missing)))
         sys.exit(1)
-    print("Checkpoints and data cache found.")
+    prepare(config)

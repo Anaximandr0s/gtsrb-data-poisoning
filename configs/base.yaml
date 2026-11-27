@@ -7,7 +7,7 @@ paths:
   metrics_dir: results/metrics
   env_info: results/env_info.json
   final_summary_md: results/final_summary.md
-  tsne_demo: results/metrics/tsne_demo.npz    # demo t-SNE points, written by python -m src.demo_charts
+  tsne_points: results/metrics/tsne_points.npz   # dashboard t-SNE points, written by python -m src.dashboard
   models_dir: results/models
 
 data:
@@ -74,14 +74,16 @@ explain:                     # visualisation only, never used for detection deci
     perplexity: 30           # sklearn default
     pca_dims: 50             # usual PCA step before t-SNE (256 -> 50)
 
-demo:                        # Streamlit app (French): reads saved checkpoints and results only
-  doses: ["5%", "10%"]       # dose selector of the interactive tests
+dashboard:                   # Streamlit dashboard: reads saved checkpoints and results only
+  rates: ["5%", "10%"]       # attack-rate selector of the live inference page
   models:
-    "5%":  {sain: baseline, piege: poisoned_r05, repare: repaired_r05_centroid}
-    "10%": {sain: baseline, piege: poisoned_r10, repare: repaired_r10_art}
+    "5%":  {clean: baseline, poisoned: poisoned_r05, repaired: repaired_r05_centroid}
+    "10%": {clean: baseline, poisoned: poisoned_r10, repaired: repaired_r10_art}
   photo_size: 220            # px, displayed photos (LANCZOS resize of the original file)
   min_photo_side: 80         # originals at least this large are "sharp" (defaults, galleries)
-  other_classes: [1, 13, 17, 25, 33, 38]   # attack page, step 7: one sharp photo per class
-  n_poisoned_cards: 6
+  other_classes: [1, 13, 17, 25, 33, 38]   # trigger-specificity gallery: one sharp photo per class
+  n_poisoned_samples: 6
   top_k: 3
-  colors: {sain: "#2E7D32", piege: "#C62828", repare: "#1565C0", neutre: "#9E9E9E", fond: "#ECEFF1"}
+  # categorical slots validated for colour-blind separation (clean, poisoned, repaired); found/missed use status colours
+  colors: {clean: "#257de0", poisoned: "#f47230", repaired: "#00b894", neutral: "#9c9c9c",
+           found: "#0aac23", missed: "#dc3c3d", clustering: "#6a4ce2", art: "#f2a600", centroid: "#ee7fac"}
