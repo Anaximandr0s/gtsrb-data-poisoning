@@ -5,5 +5,4 @@ __pycache__/
 .pytest_cache/
 results/models/*.pt
 .coverage
-coverage.xml
 .ruff_cache/

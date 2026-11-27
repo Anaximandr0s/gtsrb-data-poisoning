@@ -35,10 +35,5 @@ jobs:
           cache-dependency-path: requirements*.txt
       # CPU wheels: the CUDA build is 2 GB and the tests use synthetic data only
       - run: pip install -r requirements-dev.txt --extra-index-url https://download.pytorch.org/whl/cpu
-      - run: pytest -q --cov --cov-report=term --cov-report=xml
-      - uses: codecov/codecov-action@v7
-        if: matrix.python-version == '3.12'
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          files: coverage.xml
-          fail_ci_if_error: false
+      # the coverage table also goes to the run summary page
+      - run: pytest -q --cov --cov-report=term --cov-report=markdown-append:$GITHUB_STEP_SUMMARY
