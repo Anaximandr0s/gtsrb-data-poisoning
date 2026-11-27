@@ -8,6 +8,9 @@ select = ["E", "F", "W", "I", "B", "UP", "SIM"]
 # zips pair per-model or per-class sequences built together, so lengths always match
 ignore = ["B905"]
 
+[tool.ruff.lint.isort]
+known-first-party = ["src", "app"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]

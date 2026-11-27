@@ -1,109 +1,105 @@
-"""Page "Détection": can the trapped images be found in the training data?"""
+"""Detection: can the poisoned images be found in the training set without knowing them?"""
 
 import streamlit as st
 
-from app.common import chart, how_to_read, n_training_images, number, pct, run_json, step, tsne_points
-from src.demo import detection_found
-
-METHODS = {  # tab title -> (idea, schema kind, [(saved method name, label)])
-    "Regroupement (Activation Clustering, ART)": (
-        "Pour chaque étiquette, on sépare les images en deux groupes selon ce que le modèle « pense ». "
-        "Si un groupe est beaucoup plus petit que l'autre, ses images sont suspectes.",
-        "clustering",
-        [("clustering", "Notre version"), ("art", "Version de la bibliothèque ART")],
-    ),
-    "Distance au centre": (
-        "Pour chaque étiquette, on calcule le centre des images. "
-        "Les images très éloignées de ce centre sont suspectes.",
-        "centroid",
-        [("centroid", "Distance au centre")],
-    ),
-    "Méthode calibrée (tentative)": (
-        "On prend comme référence les images de validation, qui sont propres. "
-        "Une image d'entraînement trop différente de cette référence déclenche une alerte.",
-        "calibrated",
-        [("calibrated", "Méthode calibrée")],
-    ),
-}
+from app.common import (
+    COLORS,
+    SETTINGS,
+    chart,
+    n_training_images,
+    page_header,
+    pct,
+    results,
+    run_json,
+    section,
+    tsne_points,
+)
+from src.dashboard import METHOD_LABELS, detection_found, detection_table
+from src.dashboard_charts import detection_recall, found_strip, tsne_scatter
 
 
-def _results_row(method: str, label: str, run: str, record: dict) -> None:
-    """Squares (found / missed) and false alerts of one method on one poisoned run."""
-    detection = run_json(f"detection_{method}_{run}")
-    if detection is None:
-        st.info(f"Résultat manquant : lancez le notebook 04 ({method}, {run}).")
-        return
-    found, false_alerts = detection_found(detection, record["indices"])
-    st.markdown(f"**{label}** : {found.sum()} / {len(found)} images piégées retrouvées · "
-                f"fausses alertes : **{number(false_alerts)}** images saines accusées à tort")
-    st.image(chart(f"found_{method}_{run}"), width=640)
+def _method_cards(parameters: dict) -> None:
+    """The four methods and their fixed parameters."""
+    cards = {
+        "clustering": f"Per training label: PCA to {parameters['pca_dims']} dims, "
+                      f"{parameters['clustering']['n_clusters']}-means, flag the smaller cluster when it holds "
+                      f"less than {parameters['clustering']['size_threshold']:.0%} of the class.",
+        "art": f"IBM ART `ActivationDefence` on the hidden layer, `{parameters['art']['cluster_analysis']}` "
+               "cluster analysis.",
+        "centroid": f"Per training label: flag images whose distance to the class centroid has a z-score above "
+                    f"{parameters['centroid']['z_threshold']:g}.",
+        "calibrated": f"Distance threshold set at the {parameters['calibrated']['percentile']}th percentile of the "
+                      "clean validation set, then applied to the training set.",
+    }
+    for column, (key, text) in zip(st.columns(len(cards)), cards.items()):
+        with column.container(border=True, height="stretch"):
+            st.markdown(f"**{METHOD_LABELS[key]}**")
+            st.caption(text)
+
+
+def _found_per_method(run: str) -> None:
+    """Found / missed cells of every method on one poisoned run."""
+    record = run_json(f"{run}_poison_record")
+    for key, label in METHOD_LABELS.items():
+        detection = run_json(f"detection_{key}_{run}")
+        if detection is None:
+            continue
+        found, false_alerts = detection_found(detection, record["indices"])
+        st.markdown(f"**{label}** · found {found.sum()} of {len(found)} · {false_alerts:,} clean images flagged")
+        chart(found_strip(found, COLORS))
 
 
 def render() -> None:
     """Draw the page."""
-    st.title("Détection")
-    st.markdown("Peut-on retrouver les images piégées cachées dans les données ?")
-    records = {dose: run_json(f"poisoned_r{dose:02d}_poison_record") for dose in (5, 10)}
-    n_poison = records[5]["n_poisoned"]
-    n_train = n_training_images()
+    page_header("Detection", "Can the poisoned images be found in the training set by looking at what the "
+                "model has learned?")
+    st.info("Detection never sees the true poison indices. Every parameter was fixed in `configs/base.yaml` "
+            "before the results; the ground truth only scores a finished detection.", icon=":material/rule:")
+    summary = results()["detection_summary"]
 
-    st.divider()
-    step(1, "Le problème")
-    st.markdown(f"À 5 %, il y a **{n_poison} images piégées parmi {number(n_train)}** images d'entraînement : "
-                f"{pct(n_poison / n_train)} des données.")
-    st.image(chart("waffle_all"), width=760)
-    how_to_read(f"Chaque petit carré gris est une image d'entraînement ({number(n_train)} au total). Les carrés rouges "
-                "sont les images piégées, placées au hasard pour l'illustration : il faut les trouver.")
+    section("Methods", "All read the 256-unit hidden layer of the poisoned model.")
+    _method_cards(summary["parameters"])
 
-    st.divider()
-    step(2, "L'idée : regarder ce que le modèle « pense »")
-    st.markdown("Les **activations** sont la façon dont le modèle résume une image en nombres (256 nombres ici). "
-                "Une carte (t-SNE) place côte à côte les images dont les résumés se ressemblent.")
-    st.image(chart("tsne"), width=900)
-    how_to_read("Chaque point est une image d'entraînement Stop (gris), Limite 80 km/h (bleu clair) ou piégée "
-                "(croix rouges). Pour le modèle sain, les images piégées sont des Stop comme les autres. Pour le "
-                "modèle piégé, elles forment leur propre petit groupe : c'est ce que les méthodes cherchent. "
-                "La carte sert seulement à illustrer, elle n'est pas utilisée pour détecter.")
-
-    st.divider()
-    step(3, "Les méthodes testées")
-    st.markdown("**Images piégées retrouvées** : combien des vraies images piégées la méthode signale. "
-                "**Fausses alertes** : combien d'images saines elle signale à tort.")
-    for tab, (idea, kind, methods) in zip(st.tabs(list(METHODS)), METHODS.values()):
-        with tab:
-            schema, numbers = st.columns([2, 3])
-            with schema:
-                st.markdown(idea)
-                st.image(chart(f"schema_{kind}"))
-            with numbers:
-                for dose in (5, 10):
-                    st.markdown(f"##### Dose {dose} % ({records[dose]['n_poisoned']} images piégées)")
-                    for method, label in methods:
-                        _results_row(method, label, f"poisoned_r{dose:02d}", records[dose])
-            st.caption("Carré vert = image piégée retrouvée, carré rouge = image piégée manquée.")
+    section("Results", "Precision: share of flagged images that are really poisoned. Recall: share of the "
+            "poisoned images that are flagged.")
+    rate = st.segmented_control("Poison rate", SETTINGS["rates"], default="5%", key="detection_rate") or "5%"
+    table = detection_table(summary["rows"])
+    st.dataframe(
+        table[table["Poison rate"] == float(rate.rstrip("%")) / 100].drop(columns="Poison rate"),
+        hide_index=True, width="stretch",
+        column_config={name: st.column_config.ProgressColumn(format="percent", min_value=0.0, max_value=1.0)
+                       for name in ("Precision", "Recall", "F1")},
+    )
     calibrated = run_json("detection_calibrated_poisoned_r05")
     if calibrated:
-        st.caption(f"La méthode calibrée signale {pct(calibrated['n_flagged'] / n_train)} de toutes les images alors "
-                   "qu'elle était réglée pour en signaler environ 1 % : elle a été écartée.")
+        st.caption(f"The calibrated method flags {pct(calibrated['n_flagged'] / n_training_images())} of the "
+                   "training set while tuned for about 1%: clean training activations are not distributed like "
+                   "validation ones, so it is not used for repair.")
+    with st.expander("Which poisoned images each method found", icon=":material/grid_view:"):
+        _found_per_method(f"poisoned_r{int(rate.rstrip('%')):02d}")
 
-    st.divider()
-    step(4, "Pourquoi ça échoue à 5 %")
-    n_label = int((tsne_points()["groups"] > 0).sum())  # every training image labelled Speed limit 80
-    share = n_poison / n_label
-    st.markdown(f"Voici les {number(n_label)} images étiquetées « Limite 80 km/h », dont les {n_poison} piégées.")
-    st.image(chart("waffle_80"), width=520)
-    how_to_read(f"Les images piégées ne représentent que {pct(share, 0)} du groupe : la méthode coupe plutôt le "
-                "groupe des vraies images en deux, et les images piégées restent cachées.")
+    section("Recall against poison rate", "A-priori methods on the four poisoned models (1%, 3%, 5%, 10%).")
+    chart(detection_recall(results()["rate_study"]["detection"], COLORS))
+    asr = [r["asr"] for r in results()["rate_study"]["attack"] if r["rate"] in (0.03, 0.05)]
+    st.caption("Clustering and ART have the same recall at 5% and 10%, so their lines overlap there. "
+               f"Shaded: the 3-5% range, where the backdoor already succeeds on {pct(min(asr), 0)}-"
+               f"{pct(max(asr), 0)} of Stop signs but clustering and ART find none of the poisoned images.")
 
-    st.divider()
-    step(5, "La zone dangereuse")
-    st.image(chart("danger"), width=820)
-    how_to_read("En bas, la dose (part des images Stop piégées) ; à gauche, la part des images piégées retrouvées. "
-                "Entre 3 % et 5 %, le piège marche déjà (87 à 94 % de réussite) mais le regroupement ne retrouve "
-                "aucune image, et la distance au centre seulement une partie.")
-
-    st.divider()
-    st.subheader("Résumé")
-    st.markdown("Aucune méthode ne retrouve les images piégées à toutes les doses, et toutes accusent à tort des "
-                "centaines d'images saines. Le regroupement ne marche que quand le piège est gros (10 %). "
-                "Dans la zone dangereuse, quelques images suffisent pour piéger le modèle et restent invisibles.")
+    section("Why clustering misses at 5%", "t-SNE of hidden-layer activations of the Stop and Speed limit 80 "
+            "training images. Display only, never used to detect.")
+    points = tsne_points()
+    roles = SETTINGS["models"]["5%"]
+    left, right = st.columns(2)
+    with left:
+        st.markdown("**Clean model**")
+        chart(tsne_scatter(points, roles["clean"], COLORS))
+    with right:
+        st.markdown("**Poisoned model**")
+        chart(tsne_scatter(points, roles["poisoned"], COLORS))
+    groups = points["groups"]
+    n_label, n_poison = int((groups > 0).sum()), int((groups == 2).sum())
+    st.markdown(
+        f"The poisoned model gives the {n_poison} poisoned images a compact group of their own, but they are only "
+        f"**{pct(n_poison / n_label)}** of the {n_label:,} images labelled Speed limit 80. Two-means clustering "
+        "splits the clean majority instead, and the poisoned group stays hidden."
+    )

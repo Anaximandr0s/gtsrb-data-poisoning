@@ -1,10 +1,19 @@
 [theme]
 base = "light"
-primaryColor = "#455A64"
-backgroundColor = "#FFFFFF"
-secondaryBackgroundColor = "#F4F6F7"
-textColor = "#263238"
+primaryColor = "#257de0"
+backgroundColor = "#ffffff"
+secondaryBackgroundColor = "#f6f7f9"
+textColor = "#191919"
 font = "sans serif"
+baseRadius = "0.5rem"
+borderColor = "#e4e6ea"
+headingFontWeights = [650, 600, 600]
+
+[theme.sidebar]
+backgroundColor = "#f6f7f9"
 
 [browser]
 gatherUsageStats = false
+
+[client]
+toolbarMode = "viewer"
