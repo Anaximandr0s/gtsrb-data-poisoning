@@ -191,7 +191,7 @@ make lint   # ruff
 make test   # pytest with coverage; fails below 90%
 ```
 
-Test coverage of `src/` is **over 90%** (97.5% line and branch coverage on the latest CI run). The floor is enforced: `pytest` fails below 90% (`fail_under` in `pyproject.toml`), so a pull request cannot lower it unnoticed. Each CI run shows the coverage table in its summary.
+Test coverage of `src/` is **over 90%** (about 97% line and branch coverage at v1.0.0). The floor is enforced: `pytest` fails below 90% (`fail_under` in `pyproject.toml`), so a pull request cannot lower it unnoticed. Each CI run shows the coverage table in its summary.
 
 The tests use synthetic data only (no download): the data split and cache, the model, training and checkpoint reuse, the trigger and nested poisoning (checked against ART), each detection method, removal and retraining, every figure, the dashboard helpers and charts, and the whole pipeline from training to repair on a tiny synthetic dataset. The dashboard pages are also rendered when the checkpoints are present. CI runs lint and tests on Python 3.11 and 3.12 for every pull request.
 
