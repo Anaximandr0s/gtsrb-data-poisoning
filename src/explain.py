@@ -58,5 +58,6 @@ def trigger_attention(heatmaps: np.ndarray, cfg: dict) -> np.ndarray:
 def tsne_embedding(activations: np.ndarray, cfg: dict, seed: int) -> np.ndarray:
     """2D t-SNE of activations after a PCA step; for display only."""
     params = cfg["explain"]["tsne"]
-    reduced = PCA(n_components=min(params["pca_dims"], *activations.shape), random_state=seed).fit_transform(activations)
+    pca = PCA(n_components=min(params["pca_dims"], *activations.shape), random_state=seed)
+    reduced = pca.fit_transform(activations)
     return TSNE(n_components=2, perplexity=params["perplexity"], init="pca", random_state=seed).fit_transform(reduced)

@@ -5,8 +5,8 @@ import streamlit as st
 from app.common import (
     CFG,
     COLORS,
-    SOURCE,
     SIZE,
+    SOURCE,
     TARGET,
     chart,
     default_stop,
@@ -75,7 +75,9 @@ def render() -> None:
 
     st.divider()
     step(4, "Combien d'images faut-il ?")
-    choice = st.segmented_control("Part des images Stop modifiées", list(DOSES), default="5 %", key="dose_count") or "5 %"
+    choice = st.segmented_control(
+        "Part des images Stop modifiées", list(DOSES), default="5 %", key="dose_count"
+    ) or "5 %"
     row = attack[DOSES[choice]]
     first, second = st.columns(2)
     first.metric("Images modifiées", row["n_poisoned"])
@@ -97,8 +99,10 @@ def render() -> None:
         (right, "piege", "poisoned_r05", f"images propres + {attack[0.05]['n_poisoned']} images piégées"),
     ):
         column.markdown(
-            f"""<div style="border:1px solid #CFD8DC;border-left:6px solid {COLORS[role]};border-radius:8px;padding:14px;">
-<div style="font-weight:700;font-size:1.15rem;color:{COLORS[role]};">{'Modèle sain' if role == 'sain' else 'Modèle piégé'}</div>
+            f"""<div style="border:1px solid #CFD8DC;border-left:6px solid {COLORS[role]};
+border-radius:8px;padding:14px;">
+<div style="font-weight:700;font-size:1.15rem;color:{COLORS[role]};">
+{'Modèle sain' if role == 'sain' else 'Modèle piégé'}</div>
 <div>Même architecture, même entraînement</div>
 <div>Données : {data}</div>
 <div style="margin-top:6px;">Précision sur des images normales : <b>{pct(rows[name]['clean_acc'])}</b></div>

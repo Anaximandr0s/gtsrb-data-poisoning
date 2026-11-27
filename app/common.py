@@ -13,8 +13,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import streamlit as st
 
-from src.attack import add_trigger
 from src import demo_charts
+from src.attack import add_trigger
 from src.config import load_config
 from src.demo import (
     decision_fr,

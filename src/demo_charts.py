@@ -226,7 +226,9 @@ def export_all(cfg: dict) -> None:
         "taux_reussite_par_dose": bar_asr_by_dose(results["rate_study"]["attack"], 0.05, colors),
         "carte_tsne": tsne_panels(
             load_tsne_points(cfg, models),
-            {roles["sain"]: ("Modèle sain", colors["sain"]), roles["piege"]: ("Modèle piégé", colors["piege"])}, colors),
+            {roles["sain"]: ("Modèle sain", colors["sain"]), roles["piege"]: ("Modèle piégé", colors["piege"])},
+            colors,
+        ),
         "zone_dangereuse": danger_zone(results["rate_study"]["detection"], colors),
         "piege_restant_vs_reussite": poison_left_scatter(results["final_summary"]["rows"], colors),
         "grille_entrainement": waffle_grid(23880, 24, 199, colors, cfg["seed"]),
@@ -238,7 +240,8 @@ def export_all(cfg: dict) -> None:
     for method in ("clustering", "art", "centroid", "calibrated"):
         detection = load_run_json(cfg, f"detection_{method}_poisoned_r05")
         if detection:
-            figures[f"retrouvees_{method}_5pc"] = found_squares(detection_found(detection, record["indices"])[0], colors)
+            found = detection_found(detection, record["indices"])[0]
+            figures[f"retrouvees_{method}_5pc"] = found_squares(found, colors)
     for name, fig in figures.items():
         fig.savefig(out / f"{name}.png", dpi=150, bbox_inches="tight")
         plt.close(fig)
